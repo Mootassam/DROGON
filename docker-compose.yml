@@ -91,6 +91,18 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
 
+  worker:
+    build: ./Worker
+    ports:
+      - "3063:80"
+    restart: unless-stopped
+    volumes:
+      - "./Worker:/app"
+      - "/app/node_modules"
+    stdin_open: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
 volumes:
   phone:
   upload:

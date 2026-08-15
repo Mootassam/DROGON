@@ -1,0 +1,4 @@
+{
+  "typescript.updateImportsOnFileMove.enabled": "never",
+  "typescript.preferences.importModuleSpecifier": "non-relative"
+}
