@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- Device redirect: runs BEFORE the app bundle so small screens / phones go
+       to the mobile site. Only active on the production domain (dev untouched). -->
+  <script>
+    (function () {
+      try {
+        if (location.hostname !== 'pc.alvorafx.com') return;
+
+        var ua = navigator.userAgent || '';
+        var isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua);
+        // Largest available width signal so a desktop is never mistaken for small.
+        var w = Math.max(
+          window.innerWidth || 0,
+          (window.screen && window.screen.width) || 0,
+          document.documentElement.clientWidth || 0
+        );
+
+        // Phone/tablet OR small device → send to the phone site
+        if (isMobileUA || w < 1024) {
+          location.replace('http://159.198.45.60:3010' + location.pathname + location.search + location.hash);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/x-icon" href="/favicon/favicon.png" />
+
+  
+
+
+  <title>Finalto</title>
+</head>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" />
+
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+
+
+</body>
+
+</html>

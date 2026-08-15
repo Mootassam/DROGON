@@ -1,0 +1,17 @@
+
+import PermissionChecker from "../../services/user/permissionChecker";
+import ApiResponseHandler from "../apiResponseHandler";
+import Permissions from "../../security/permissions";
+import AssetsServices from '../../services/assetsServices';
+
+
+export default async (req, res, next) => {
+  try {
+    const fiat =  req.params.id;
+    // new PermissionChecker(req).validateHas(Permissions.values.categoryRead);  
+    const payload = await new AssetsServices(req).ConvertFiat(fiat);
+    await ApiResponseHandler.success(req, res, payload);
+  } catch (error) {
+    await ApiResponseHandler.error(req, res, error);
+  }
+};

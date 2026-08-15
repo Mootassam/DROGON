@@ -1,0 +1,97 @@
+# REMOVE THE DUPLICATE VERSION AND SERVICES SECTION AT THE BOTTOM!
+
+services:
+  backend:
+    build: ./server
+    ports:
+      - 8082:8085
+    restart: unless-stopped
+    volumes:
+      - upload:/upload
+    environment:
+      DATABASE_CONNECTION: mongodb://db:27017/grap
+      REDIS_URL: redis://:91l3C92VHX9OytcgcV@redis:6379
+      FUTURES_QUEUE_NAME: futures_queue
+    depends_on:
+      - db
+      - redis
+
+
+  db:
+    image: mongo:4.0-xenial
+    ports:
+      - 2747:27017
+    restart: unless-stopped
+    volumes:
+      - phone:/data/db
+
+  redis:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: >
+      sh -c "
+      mkdir -p /data &&
+      redis-server
+      --appendonly yes
+      --dir /data
+      --requirepass 91l3C92VHX9OytcgcV
+      --protected-mode yes
+      --bind 0.0.0.0
+      --rename-command FLUSHDB ''
+      --rename-command FLUSHALL ''
+      --rename-command CONFIG ''
+      --rename-command SHUTDOWN ''
+      --rename-command DEBUG ''
+      --rename-command SAVE ''
+      --rename-command BGSAVE ''
+      --rename-command SLAVEOF ''
+      --rename-command REPLICAOF ''
+      --rename-command MODULE ''
+      --rename-command PSYNC ''
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      "
+
+  web:
+    build: ./admin
+    ports:
+      - 3062:80
+    restart: unless-stopped
+    volumes:
+      - "./admin:/app"
+      - "/app/node_modules"
+    stdin_open: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+  web1:
+    build: ./graborders
+    ports:
+      - "3010:80"
+    restart: unless-stopped
+    volumes:
+      - "./graborders:/app"
+      - "/app/node_modules"
+    stdin_open: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+
+  web2:
+    build: ./PC
+    ports:
+      - "3013:80"
+    restart: unless-stopped
+    volumes:
+      - "./PC:/app"
+      - "/app/node_modules"
+    stdin_open: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+volumes:
+  phone:
+  upload:
+  redis_data:

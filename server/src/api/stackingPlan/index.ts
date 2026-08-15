@@ -1,0 +1,30 @@
+export default (app) => {
+  app.post(
+    `/tenant/:tenantId/stackingPlan`,
+    require('./stackingPlanCreate').default,
+  );
+  app.put(
+    `/tenant/:tenantId/stackingPlan/:id`,
+    require('./stackingPlanUpdate').default,
+  );
+  app.post(
+    `/tenant/:tenantId/stackingPlan/import`,
+    require('./stackingPlanImport').default,
+  );
+  app.delete(
+    `/tenant/:tenantId/stackingPlan`,
+    require('./stackingPlanDestroy').default,
+  );
+  app.get(
+    `/tenant/:tenantId/stackingPlan/autocomplete`,
+    require('./stackingPlanAutocomplete').default,
+  );
+  app.get(
+    `/tenant/:tenantId/stackingPlan`,
+    require('./stackingPlanList').default,
+  );
+  app.get(
+    `/tenant/:tenantId/stackingPlan/:id`,
+    require('./stackingPlanFind').default,
+  );
+};

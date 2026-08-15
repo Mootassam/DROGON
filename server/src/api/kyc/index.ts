@@ -1,0 +1,30 @@
+export default (app) => {
+  app.post(
+    `/tenant/:tenantId/kyc`,
+    require('./kycCreate').default,
+  );
+  app.put(
+    `/tenant/:tenantId/kyc/:id`,
+    require('./kycUpdate').default,
+  );
+  app.post(
+    `/tenant/:tenantId/kyc/import`,
+    require('./kycImport').default,
+  );
+  app.delete(
+    `/tenant/:tenantId/kyc`,
+    require('./kycDestroy').default,
+  );
+  app.get(
+    `/tenant/:tenantId/kyc/autocomplete`,
+    require('./kycAutocomplete').default,
+  );
+  app.get(
+    `/tenant/:tenantId/kyc`,
+    require('./kycList').default,
+  );
+  app.get(
+    `/tenant/:tenantId/kyc/:id`,
+    require('./kycFind').default,
+  );
+};

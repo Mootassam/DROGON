@@ -1,0 +1,30 @@
+export default (app) => {
+  app.post(
+    `/tenant/:tenantId/method`,
+    require('./depositMethodCreate').default,
+  );
+  app.put(
+    `/tenant/:tenantId/method/:id`,
+    require('./depositMethodUpdate').default,
+  );
+  app.post(
+    `/tenant/:tenantId/method/import`,
+    require('./depositMethodImport').default,
+  );
+  app.delete(
+    `/tenant/:tenantId/method`,
+    require('./depositMethodDestroy').default,
+  );
+  app.get(
+    `/tenant/:tenantId/method/autocomplete`,
+    require('./depositMethodAutocomplete').default,
+  );
+  app.get(
+    `/tenant/:tenantId/method`,
+    require('./depositMethodList').default,
+  );
+  app.get(
+    `/tenant/:tenantId/method/:id`,
+    require('./depositMethodFind').default,
+  );
+};

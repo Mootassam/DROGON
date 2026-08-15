@@ -1,0 +1,1153 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import CoinSelectorSidebar from "src/view/shared/modals/CoinSelectorSidebar";
+import FuturesModal from "src/shared/modal/FuturesModal";
+import futuresListAction from "src/modules/futures/list/futuresListActions";
+import futuresListSelectors from "src/modules/futures/list/futuresListSelectors";
+import assetsListAction from "src/modules/assets/list/assetsListActions";
+import selector from "src/modules/assets/list/assetsListSelectors";
+import FutureList from "./FutureList";
+import { i18n } from '../../../i18n';
+import TradingViewChart from "../Market/TradingViewChart";
+
+// ----------------------------------------------------------------------
+// Types & Helpers
+// ----------------------------------------------------------------------
+interface MarketData {
+  symbol: string;
+  ask: number;
+  bid: number;
+}
+
+const currencyToCountry: Record<string, string> = {
+  EUR: 'eu', USD: 'us', GBP: 'gb', JPY: 'jp', AUD: 'au', CAD: 'ca',
+  CHF: 'ch', NZD: 'nz', MXN: 'mx', TRY: 'tr', ZAR: 'za', SGD: 'sg',
+  HKD: 'hk', KRW: 'kr', INR: 'in', XAU: 'au', XAG: 'au', XPT: 'au',
+  XPD: 'au', USOIL: 'us', UKOIL: 'gb', BRENT: 'gb', WTI: 'us',
+  CRUDE: 'us', NGAS: 'us', HEAT: 'us', GAS: 'us', US30: 'us',
+  US500: 'us', NAS100: 'us', US2000: 'us', GER40: 'de', UK100: 'gb',
+  FRA40: 'fr', EU50: 'eu', JP225: 'jp', HK50: 'hk', AUS200: 'au',
+  TWII: 'tw', KR100: 'kr', IN50: 'in', TECH100: 'us', BTC: 'generic',
+  ETH: 'generic', XRP: 'generic', SOL: 'generic', ADA: 'generic',
+  DOGE: 'generic', DOT: 'generic', AVAX: 'generic', LINK: 'generic',
+  MATIC: 'generic', UNI: 'generic', ATOM: 'generic', LTC: 'generic',
+  BCH: 'generic', NEAR: 'generic', ALGO: 'generic', VET: 'generic',
+  FIL: 'generic', THETA: 'generic', AXS: 'generic', SAND: 'generic',
+  MANA: 'generic', ENJ: 'generic', CHZ: 'generic', APE: 'generic',
+};
+
+const availableCoins = [
+  // ... (your full availableCoins array, unchanged)
+  { symbol: "EURUSD", name: "EUR / USD" },
+  { symbol: "GBPUSD", name: "GBP / USD" },
+  { symbol: "USDJPY", name: "USD / JPY" },
+  { symbol: "AUDUSD", name: "AUD / USD" },
+  { symbol: "USDCAD", name: "USD / CAD" },
+  { symbol: "USDCHF", name: "USD / CHF" },
+  { symbol: "NZDUSD", name: "NZD / USD" },
+  { symbol: "EURGBP", name: "EUR / GBP" },
+  { symbol: "EURJPY", name: "EUR / JPY" },
+  { symbol: "GBPJPY", name: "GBP / JPY" },
+  { symbol: "AUDJPY", name: "AUD / JPY" },
+  { symbol: "EURAUD", name: "EUR / AUD" },
+  { symbol: "GBPAUD", name: "GBP / AUD" },
+  { symbol: "USDMXN", name: "USD / MXN" },
+  { symbol: "USDTRY", name: "USD / TRY" },
+  { symbol: "USDZAR", name: "USD / ZAR" },
+  { symbol: "USDSGD", name: "USD / SGD" },
+  { symbol: "USDHKD", name: "USD / HKD" },
+  { symbol: "USDKRW", name: "USD / KRW" },
+  { symbol: "USDINR", name: "USD / INR" },
+  { symbol: "EURCHF", name: "EUR / CHF" },
+  { symbol: "EURNZD", name: "EUR / NZD" },
+  { symbol: "GBPEUR", name: "GBP / EUR" },
+  { symbol: "AUDNZD", name: "AUD / NZD" },
+  { symbol: "CADJPY", name: "CAD / JPY" },
+  { symbol: "CHFJPY", name: "CHF / JPY" },
+  { symbol: "NZDJPY", name: "NZD / JPY" },
+  { symbol: "SGDJPY", name: "SGD / JPY" },
+  { symbol: "HKDJPY", name: "HKD / JPY" },
+  { symbol: "ZARJPY", name: "ZAR / JPY" },
+  { symbol: "XAUUSD", name: "Gold" },
+  { symbol: "XAGUSD", name: "Silver" },
+  { symbol: "XPTUSD", name: "Platinum" },
+  { symbol: "XPDUSD", name: "Palladium" },
+  { symbol: "XAUEUR", name: "Gold / EUR" },
+  { symbol: "XAGEUR", name: "Silver / EUR" },
+  { symbol: "XPTEUR", name: "Platinum / EUR" },
+  { symbol: "XAUGBP", name: "Gold / GBP" },
+  { symbol: "XAGGBP", name: "Silver / GBP" },
+  { symbol: "USOIL", name: "US Oil" },
+  { symbol: "UKOIL", name: "UK Oil" },
+  { symbol: "BRENT", name: "Brent" },
+  { symbol: "WTI", name: "WTI" },
+  { symbol: "CRUDE", name: "Crude" },
+  { symbol: "NGAS", name: "Natural Gas" },
+  { symbol: "HEAT", name: "Heating Oil" },
+  { symbol: "GAS", name: "Gasoline" },
+  { symbol: "US30", name: "Dow 30" },
+  { symbol: "US500", name: "S&P 500" },
+  { symbol: "NAS100", name: "Nasdaq 100" },
+  { symbol: "US2000", name: "Russell 2000" },
+  { symbol: "GER40", name: "DAX" },
+  { symbol: "UK100", name: "FTSE 100" },
+  { symbol: "FRA40", name: "CAC 40" },
+  { symbol: "EU50", name: "Euro Stoxx 50" },
+  { symbol: "JP225", name: "Nikkei 225" },
+  { symbol: "HK50", name: "Hang Seng" },
+  { symbol: "AUS200", name: "ASX 200" },
+  { symbol: "TWII", name: "Taiwan" },
+  { symbol: "KR100", name: "KOSPI" },
+  { symbol: "IN50", name: "Nifty 50" },
+  { symbol: "TECH100", name: "Tech 100" },
+  { symbol: "BTCUSD", name: "Bitcoin" },
+  { symbol: "ETHUSD", name: "Ethereum" },
+  { symbol: "XRPUSD", name: "Ripple" },
+  { symbol: "SOLUSD", name: "Solana" },
+  { symbol: "ADAUSD", name: "Cardano" },
+  { symbol: "DOGEUSD", name: "Dogecoin" },
+  { symbol: "DOTUSD", name: "Polkadot" },
+  { symbol: "AVAXUSD", name: "Avalanche" },
+  { symbol: "LINKUSD", name: "Chainlink" },
+  { symbol: "MATICUSD", name: "Polygon" },
+  { symbol: "UNIUSD", name: "Uniswap" },
+  { symbol: "ATOMUSD", name: "Cosmos" },
+  { symbol: "LTCUSD", name: "Litecoin" },
+  { symbol: "BCHUSD", name: "Bitcoin Cash" },
+  { symbol: "NEARUSD", name: "Near" },
+  { symbol: "ALGOUSD", name: "Algorand" },
+  { symbol: "VETUSD", name: "VeChain" },
+  { symbol: "FILUSD", name: "Filecoin" },
+  { symbol: "THETAUSD", name: "Theta" },
+  { symbol: "AXSUSD", name: "Axie Infinity" },
+  { symbol: "SANDUSD", name: "The Sandbox" },
+  { symbol: "MANAUSD", name: "Decentraland" },
+  { symbol: "ENJUSD", name: "Enjin Coin" },
+  { symbol: "CHZUSD", name: "Chiliz" },
+  { symbol: "APEUSD", name: "ApeCoin" },
+];
+
+interface Order {
+  id: number;
+  pair: string;
+  direction: string;
+  status: string;
+  investment: number;
+  openPrice: number;
+  openTime: string;
+  leverage: number;
+  pnl?: number;
+  closePrice?: number;
+  closeTime?: string;
+  currentPrice?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  orderType: string;
+  margin: number;
+  fee: number;
+}
+
+function Futures() {
+  const dispatch = useDispatch();
+
+  // Redux
+  const listAssets = useSelector(selector.selectRows);
+  const listFutures = useSelector(futuresListSelectors.selectRows);
+  const pendingList = useSelector(futuresListSelectors.pendingRows);
+  const pendingCount = useSelector(futuresListSelectors.pendingcount);
+  const pendingLoading = useSelector(futuresListSelectors.pendingLoading);
+  const futuretLoading = useSelector(futuresListSelectors.selectLoading);
+  const countFutures = useSelector(futuresListSelectors.selectCount);
+
+  // ----- WebSocket real‑time data -----
+  const wsRef = useRef<WebSocket | null>(null);
+  const sessionRef = useRef<string | null>(null);
+  const subscribedSymbolRef = useRef<string | null>(null); // Track active subscription
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [markets, setMarkets] = useState<MarketData[]>([]);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [priceChangePercent, setPriceChangePercent] = useState<number | null>(null);
+  const initialPriceRef = useRef<{ [symbol: string]: number }>({});
+  const highRef = useRef<{ [symbol: string]: number }>({});
+  const lowRef = useRef<{ [symbol: string]: number }>({});
+
+  // UI state
+  const [selectedCoin, setSelectedCoin] = useState("EURUSD");
+  const [activeTab, setActiveTab] = useState<"openOrders" | "recentOrders">("openOrders");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [tradeDirection, setTradeDirection] = useState<"up" | "down" | null>(null);
+  const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [USDBalance, setUSDBalance] = useState<number>(0);
+  const [openingOrders, setOpeningOrders] = useState<any[]>([]);
+
+  // ----- Helpers -----
+  const encode = useCallback((msg: string) => `~m~${msg.length}~m~${msg}`, []);
+  const parseMessages = useCallback((data: string): string[] => {
+    const result: string[] = [];
+    let buffer = data;
+    while (buffer.length > 0) {
+      if (!buffer.startsWith("~m~")) break;
+      const second = buffer.indexOf("~m~", 3);
+      const length = parseInt(buffer.substring(3, second));
+      const message = buffer.substr(second + 3, length);
+      result.push(message);
+      buffer = buffer.substr(second + 3 + length);
+    }
+    return result;
+  }, []);
+
+  const extractSymbol = useCallback((raw: string): string => {
+    try {
+      const cleaned = raw.replace(/^=\{/, "{");
+      const obj = JSON.parse(cleaned);
+      return obj.symbol || "UNKNOWN";
+    } catch {
+      return raw;
+    }
+  }, []);
+
+  // ----- Core subscription logic -----
+  const subscribeToSymbol = useCallback((symbol: string) => {
+    const ws = wsRef.current;
+    const session = sessionRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !session) return;
+
+    // If already subscribed to the same symbol, do nothing
+    if (subscribedSymbolRef.current === symbol) return;
+
+    // Unsubscribe from old symbol if any
+    if (subscribedSymbolRef.current) {
+      ws.send(encode(JSON.stringify({ m: "quote_remove_symbols", p: [session, subscribedSymbolRef.current] })));
+    }
+
+    // Subscribe to new symbol
+    ws.send(encode(JSON.stringify({ m: "quote_add_symbols", p: [session, symbol] })));
+    subscribedSymbolRef.current = symbol;
+
+    // Reset all derived data for the new symbol
+    setMarkets([]);
+    setCurrentPrice(null);
+    setPriceChangePercent(null);
+    setIsLoading(true);
+    delete highRef.current[symbol];
+    delete lowRef.current[symbol];
+    delete initialPriceRef.current[symbol];
+  }, [encode]);
+
+  // WebSocket connection & initial subscription
+  const connectWebSocket = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    const ws = new WebSocket("wss://widgetdata.tradingview.com/socket.io/websocket");
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      const session = "qs_" + Math.random().toString(36).substring(2, 12);
+      sessionRef.current = session;
+
+      ws.send(encode(JSON.stringify({ m: "quote_create_session", p: [session] })));
+      ws.send(encode(JSON.stringify({ m: "quote_set_fields", p: [session, "ask", "bid", "ask_size", "bid_size"] })));
+
+      // Subscribe to the current symbol (using ref to always have the latest)
+      const currentSymbol = selectedCoinRef.current;
+      subscribeToSymbol(currentSymbol);
+    };
+
+    ws.onmessage = (event) => {
+      const raw = event.data;
+      if (raw.startsWith("~h~")) {
+        ws.send(raw);
+        return;
+      }
+
+      const messages = parseMessages(raw);
+      messages.forEach((msg) => {
+        try {
+          const json = JSON.parse(msg);
+          if (json.m === "qsd") {
+            const payload = json.p[1];
+            const symbol = extractSymbol(payload.n);
+            const values = payload.v;
+            if (!values) return;
+
+            const market: MarketData = {
+              symbol,
+              ask: values.ask ?? 0,
+              bid: values.bid ?? 0,
+            };
+
+            setMarkets((prev) => {
+              const filtered = prev.filter((m) => m.symbol !== symbol);
+              return [...filtered, market];
+            });
+          }
+        } catch (err) {
+          // ignore non-json frames
+        }
+      });
+    };
+
+    ws.onclose = (event) => {
+      subscribedSymbolRef.current = null;
+      if (!event.wasClean) {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectWebSocket();
+        }, 3000);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error("WebSocket error:", err);
+    };
+  }, [encode, parseMessages, extractSymbol, subscribeToSymbol]);
+
+  // Keep selectedCoinRef in sync
+  const selectedCoinRef = useRef(selectedCoin);
+  useEffect(() => {
+    selectedCoinRef.current = selectedCoin;
+  }, [selectedCoin]);
+
+  // Mount / unmount connection
+  useEffect(() => {
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [connectWebSocket]);
+
+  // When selectedCoin changes, update the subscription
+  useEffect(() => {
+    subscribeToSymbol(selectedCoin);
+  }, [selectedCoin, subscribeToSymbol]);
+
+  // Derive current price, high, low, and change percent
+  useEffect(() => {
+    const market = markets.find((m) => m.symbol === selectedCoin);
+    if (!market || !market.ask || !market.bid) return;
+
+    const midPrice = (market.ask + market.bid) / 2;
+    setCurrentPrice(midPrice);
+    setIsLoading(false);
+
+    if (initialPriceRef.current[selectedCoin] === undefined) {
+      initialPriceRef.current[selectedCoin] = midPrice;
+      setPriceChangePercent(0);
+    } else {
+      const initial = initialPriceRef.current[selectedCoin];
+      const change = ((midPrice - initial) / initial) * 100;
+      setPriceChangePercent(change);
+    }
+
+    if (!highRef.current[selectedCoin] || midPrice > highRef.current[selectedCoin]) {
+      highRef.current[selectedCoin] = midPrice;
+    }
+    if (!lowRef.current[selectedCoin] || midPrice < lowRef.current[selectedCoin]) {
+      lowRef.current[selectedCoin] = midPrice;
+    }
+  }, [markets, selectedCoin]);
+
+  // Balance & orders
+  const calculateBalances = useCallback(() => {
+    if (listAssets?.length > 0) {
+      const USDAsset = listAssets.find((asset: any) => asset.symbol === 'USDT');
+      setUSDBalance(USDAsset?.amount || 0);
+    }
+  }, [listAssets]);
+
+  useEffect(() => { calculateBalances(); }, [calculateBalances]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsOrdersLoading(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchData = async () => {
+      try {
+        await Promise.all([
+          dispatch(futuresListAction.doFetchPending()),
+          dispatch(assetsListAction.doFetch())
+        ]);
+      } catch (error) {
+        if (isMounted) console.error("Error fetching data:", error);
+      }
+    };
+    fetchData();
+    return () => { isMounted = false; };
+  }, [dispatch]);
+
+  const currentTabData = useMemo(() => {
+    if (activeTab === "openOrders") {
+      return {
+        count: pendingCount,
+        loading: pendingLoading,
+        list: Array.isArray(pendingList) ? pendingList : []
+      };
+    } else {
+      return {
+        count: countFutures,
+        loading: futuretLoading,
+        list: Array.isArray(listFutures) ? listFutures : []
+      };
+    }
+  }, [activeTab, pendingCount, pendingLoading, pendingList, countFutures, futuretLoading, listFutures]);
+
+  // Formatting
+  const formatNumber = useCallback((num: any, decimals?: number): string => {
+    if (num === null || num === undefined) return "0.00";
+    const numValue = typeof num === "string" ? parseFloat(num) : num;
+    if (isNaN(numValue)) return "0.00";
+    return numValue.toFixed(decimals ?? 5);
+  }, []);
+
+  const formatDateTime = useCallback((dateString: string): string => {
+    if (!dateString) return i18n('pages.assetsDetail.status.pending');
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
+      if (isToday) {
+        return i18n('pages.history.dateFormats.today', date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      }
+      return i18n('pages.history.dateFormats.yesterday', date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    } catch (error) {
+      console.error("Error formatting date:", error, dateString);
+      return dateString;
+    }
+  }, []);
+
+  const formatDateTimeDetailed = useCallback((dateString: string): string => {
+    if (!dateString) return i18n('pages.assetsDetail.status.pending');
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      return `${date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" })} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+    } catch (error) {
+      console.error("Error formatting date:", error, dateString);
+      return dateString;
+    }
+  }, []);
+
+  const safeToFixed = useCallback((value: any, decimals: number = 2): string => {
+    if (value === null || value === undefined) return "0.00";
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    return isNaN(num) ? "0.00" : num.toFixed(decimals);
+  }, []);
+
+  const flagUrl = useMemo(() => {
+    const baseCurrency = selectedCoin.slice(0, 3);
+    const countryCode = currencyToCountry[baseCurrency] || baseCurrency.toLowerCase();
+    return `https://flagcdn.com/w40/${countryCode}.png`;
+  }, [selectedCoin]);
+
+  const handleOpenCoinModal = useCallback(() => setIsCoinModalOpen(true), []);
+  const handleCloseCoinModal = useCallback(() => setIsCoinModalOpen(false), []);
+  const handleSelectCoin = useCallback((coin: string) => {
+    setSelectedCoin(coin);
+    setIsCoinModalOpen(false);
+  }, []);
+
+  const handleOpenModal = useCallback((direction: "up" | "down") => {
+    dispatch(assetsListAction.doFetch());
+    setTradeDirection(direction);
+    setIsModalOpen(true);
+  }, [dispatch]);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setTradeDirection(null);
+  }, []);
+
+  const handleOpenOrderModal = useCallback((order: any) => {
+    setSelectedOrder(order);
+    setIsOrderModalOpen(true);
+  }, []);
+
+  const handleCloseOrderModal = useCallback(() => {
+    setIsOrderModalOpen(false);
+    setSelectedOrder(null);
+  }, []);
+
+  const FetchTab = useCallback((tab: string) => {
+    if (tab === "openOrders") {
+      setActiveTab("openOrders");
+      dispatch(futuresListAction.doFetchPending());
+    } else {
+      setActiveTab("recentOrders");
+      dispatch(futuresListAction.doFetch());
+    }
+  }, [dispatch]);
+
+  const LoadingPlaceholder = ({ width = "100%", height = "1em" }) => (
+    <div className="loading-placeholder" style={{ width, height }} />
+  );
+
+  const displayName = useMemo(() => {
+    const coin = availableCoins.find(c => c.symbol === selectedCoin);
+    return coin?.name || selectedCoin.replace(/(.{3})(.{3})/, "$1 / $2");
+  }, [selectedCoin]);
+
+  const high = highRef.current[selectedCoin] ?? (currentPrice ?? 0);
+  const low = lowRef.current[selectedCoin] ?? (currentPrice ?? 0);
+
+  return (
+    <div className="container">
+      {/* Header, unchanged */}
+      <div className="header">
+        <div className="header-top">
+          <div className="market-info">
+            <div className="market-icon">
+              <img
+                src={flagUrl}
+                style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }}
+                alt={selectedCoin}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+            <div className="market-name">{displayName}</div>
+            <div className="market-change" style={{ color: (priceChangePercent ?? 0) < 0 ? "#FF6838" : "#00C076" }}>
+              {currentPrice !== null ? (
+                `${(priceChangePercent ?? 0) > 0 ? '+' : ''}${(priceChangePercent ?? 0).toFixed(2)}%`
+              ) : (
+                <LoadingPlaceholder width="50px" height="16px" />
+              )}
+            </div>
+          </div>
+          <div className="additional-actions" onClick={handleOpenCoinModal}>
+            <i className="fas fa-filter" />
+          </div>
+        </div>
+        <div className="market-price" style={{ color: (priceChangePercent ?? 0) < 0 ? "#FF6838" : "#39FF14" }}>
+          {currentPrice !== null ? (
+            `$${formatNumber(currentPrice)}`
+          ) : (
+            <LoadingPlaceholder width="120px" height="28px" />
+          )}
+        </div>
+        <div className="market-stats">
+          <span>
+            {i18n('pages.marketDetail.stats.high')}: {" "}
+            {currentPrice !== null ? `$${formatNumber(high)}` : <LoadingPlaceholder width="80px" height="12px" />}
+          </span>
+          <span>
+            {i18n('pages.marketDetail.stats.low')}: {" "}
+            {currentPrice !== null ? `$${formatNumber(low)}` : <LoadingPlaceholder width="80px" height="12px" />}
+          </span>
+        </div>
+      </div>
+
+      <TradingViewChart key={selectedCoin} symbol={selectedCoin} height={400} />
+
+      <div className="future-action-buttons">
+        <button className="action-button buy-button" onClick={() => handleOpenModal("up")}>
+          {i18n('pages.futures.actions.buyUp')}
+        </button>
+        <button className="action-button sell-button" onClick={() => handleOpenModal("down")}>
+          {i18n('pages.futures.actions.buyDown')}
+        </button>
+      </div>
+
+      <div className="section-tabs">
+        <div className={`tab ${activeTab === "openOrders" ? "active" : ""}`} onClick={() => FetchTab("openOrders")}>
+          {i18n('pages.futures.tabs.openOrders')} ({pendingCount || 0})
+        </div>
+        <div className={`tab ${activeTab === "recentOrders" ? "active" : ""}`} onClick={() => FetchTab("recentOrders")}>
+          {i18n('pages.futures.tabs.recentOrders')} ({countFutures || 0})
+        </div>
+      </div>
+
+      <FutureList
+        countFutures={currentTabData.count}
+        futuretLoading={currentTabData.loading}
+        listFutures={currentTabData.list}
+        handleOpenOrderModal={handleOpenOrderModal}
+        formatNumber={formatNumber}
+        formatDateTime={formatDateTime}
+      />
+
+      {isOrderModalOpen && selectedOrder && (
+        <OrderDetailModal
+          selectedOrder={selectedOrder}
+          onClose={handleCloseOrderModal}
+          formatDateTimeDetailed={formatDateTimeDetailed}
+          safeToFixed={safeToFixed}
+        />
+      )}
+
+      <FuturesModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        direction={tradeDirection}
+        dispatch={dispatch}
+        listAssets={listAssets}
+        selectedCoin={selectedCoin}
+        marketPrice={currentPrice?.toString() ?? "0"}
+        availableBalance={USDBalance}
+        setOpeningOrders={setOpeningOrders}
+      />
+
+      <CoinSelectorSidebar
+        isOpen={isCoinModalOpen}
+        onClose={handleCloseCoinModal}
+        selectedCoin={selectedCoin}
+        onCoinSelect={handleSelectCoin}
+        availableCoins={availableCoins.map(c => ({ symbol: c.symbol, name: c.name }))}
+        title={i18n('pages.marketDetail.coinSelector.title')}
+      />
+
+      <style>{`
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .container {
+          
+          margin: 0 auto;
+          min-height: 100vh;
+          background-color: #0f0f0f;
+          border-top: 2px solid #39FF14;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+          color: #ffffff;
+        }
+
+        .header {
+          background-color: #0f0f0f;
+          padding: 20px 15px 15px;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          border-bottom: 1px solid #2a2a2a;
+        }
+
+        .header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+        }
+
+        .market-info {
+          display: flex;
+          align-items: center;
+        }
+
+        .market-icon {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          background-color: #1c1c1c;
+          margin-right: 10px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          border: 1px solid #2a2a2a;
+          overflow: hidden;
+        }
+        .market-icon img {
+          border-radius: 50%;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .market-name {
+          font-weight: bold;
+          font-size: 18px;
+          margin-right: 10px;
+          color: #ffffff;
+        }
+
+        .market-change {
+          font-size: 14px;
+          font-weight: bold;
+        }
+
+        .market-price {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 5px;
+        }
+
+        .market-stats {
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          color: #aaaaaa;
+          flex-wrap: wrap;
+        }
+
+        .market-stats span {
+          margin-right: 10px;
+          margin-bottom: 5px;
+        }
+
+        .additional-actions {
+          color: #aaaaaa;
+          font-size: 20px;
+          cursor: pointer;
+        }
+        .additional-actions:hover {
+          color: #39FF14;
+        }
+
+        .future-action-buttons {
+          display: flex;
+          gap: 15px;
+          margin: 15px;
+        }
+
+        .action-button {
+          flex: 1;
+          padding: 13px;
+          border: none;
+          font-size: 13px;
+          font-weight: bold;
+          cursor: pointer;
+          border-radius: 6px;
+          transition: opacity 0.2s;
+        }
+        .action-button:hover {
+          opacity: 0.9;
+        }
+
+        .buy-button {
+          background-color: #39FF14;
+          color: #0f0f0f;
+        }
+
+        .sell-button {
+          background-color: #ff4d4d;
+          color: #ffffff;
+        }
+
+        .section-tabs {
+          display: flex;
+          margin: 15px 15px 0;
+          border-bottom: 1px solid #2a2a2a;
+        }
+
+        .tab {
+          padding: 10px 15px;
+          cursor: pointer;
+          color: #777;
+          font-size: 14px;
+          position: relative;
+          flex: 1;
+          text-align: center;
+        }
+
+        .tab.active {
+          color: #39FF14;
+          font-weight: bold;
+        }
+
+        .tab.active::after {
+          content: '';
+          position: absolute;
+          bottom: -1px;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background-color: #39FF14;
+        }
+
+        .orders-container {
+          margin: 15px;
+        }
+
+        .order-card {
+          background-color: #1c1c1c;
+          border: 1px solid #2a2a2a;
+          border-radius: 8px;
+          padding: 15px;
+          margin-bottom: 15px;
+          cursor: pointer;
+          transition: transform 0.2s, border-color 0.2s;
+        }
+        .order-card.loading {
+          cursor: default;
+        }
+        .order-card:hover:not(.loading) {
+          transform: translateY(-2px);
+          border-color: #39FF14;
+        }
+
+        .order-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+
+        .order-pair {
+          font-weight: bold;
+          font-size: 16px;
+          color: #ffffff;
+        }
+
+        .order-direction {
+          font-size: 12px;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-weight: bold;
+        }
+        .order-direction.buy {
+          background-color: rgba(57, 255, 20, 0.2);
+          color: #39FF14;
+        }
+        .order-direction.sell {
+          background-color: rgba(255, 77, 77, 0.2);
+          color: #ff4d4d;
+        }
+
+        .order-status {
+          font-size: 12px;
+          margin-bottom: 12px;
+        }
+        .order-status.open {
+          color: #39FF14;
+        }
+        .order-status.closed {
+          color: #777;
+        }
+
+        .order-details {
+          border-top: 1px solid #2a2a2a;
+          padding-top: 12px;
+        }
+
+        .order-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 8px;
+          font-size: 13px;
+        }
+
+        .order-label {
+          color: #aaaaaa;
+        }
+
+        .order-value {
+          font-weight: 500;
+          color: #ffffff;
+        }
+        .order-value.buy {
+          color: #39FF14;
+        }
+        .order-value.sell {
+          color: #ff4d4d;
+        }
+
+        .no-orders {
+          text-align: center;
+          padding: 30px 0;
+          color: #777;
+        }
+        .no-orders i {
+          font-size: 24px;
+          margin-bottom: 10px;
+          opacity: 0.5;
+          color: #39FF14;
+        }
+
+        .loading-placeholder {
+          animation: pulse 1.5s ease-in-out infinite;
+          background-color: #2a2a2a;
+          border-radius: 4px;
+        }
+
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.5; }
+          100% { opacity: 1; }
+        }
+
+        .modal-overlays {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.8);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          padding: 20px;
+        }
+
+        .modal-content {
+          background-color: #1c1c1c;
+          border-radius: 12px;
+          width: 100%;
+          
+          max-height: 80vh;
+          overflow-y: auto;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+          border: 1px solid #2a2a2a;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px;
+          border-bottom: 1px solid #2a2a2a;
+        }
+
+        .modal-header h2 {
+          font-size: 18px;
+          font-weight: bold;
+          color: #ffffff;
+        }
+
+        .modal-close {
+          background: none;
+          border: none;
+          color: #aaaaaa;
+          font-size: 20px;
+          cursor: pointer;
+        }
+        .modal-close:hover {
+          color: #39FF14;
+        }
+
+        .modal-body {
+          padding: 20px;
+        }
+
+        .modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          padding: 20px;
+          border-top: 1px solid #2a2a2a;
+          gap: 10px;
+        }
+
+        .modal-button {
+          background-color: #2a2a2a;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 10px 20px;
+          cursor: pointer;
+          font-weight: bold;
+        }
+        .modal-button:hover {
+          background-color: #39FF14;
+          color: #0f0f0f;
+        }
+
+        .close-order-button {
+          background-color: #ff4d4d;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 10px 20px;
+          cursor: pointer;
+          font-weight: bold;
+        }
+        .close-order-button:hover {
+          background-color: #ff3333;
+        }
+
+        .order-detail-section {
+          margin-bottom: 20px;
+        }
+
+        .order-detail-section h3 {
+          font-size: 14px;
+          color: #aaaaaa;
+          margin-bottom: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .detail-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+
+        .detail-pair {
+          font-weight: bold;
+          font-size: 18px;
+          color: #ffffff;
+        }
+
+        .detail-direction {
+          font-size: 14px;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-weight: bold;
+        }
+        .detail-direction.buy {
+          background-color: rgba(57, 255, 20, 0.2);
+          color: #39FF14;
+        }
+        .detail-direction.sell {
+          background-color: rgba(255, 77, 77, 0.2);
+          color: #ff4d4d;
+        }
+
+        .detail-status {
+          font-size: 14px;
+          margin-bottom: 15px;
+        }
+        .detail-status.open {
+          color: #39FF14;
+        }
+        .detail-status.closed {
+          color: #777;
+        }
+
+        .detail-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 10px;
+          font-size: 14px;
+        }
+
+        .detail-label {
+          color: #aaaaaa;
+        }
+
+        .detail-value {
+          font-weight: 500;
+          color: #ffffff;
+        }
+        .detail-value.profit {
+          color: #39FF14;
+        }
+        .detail-value.loss {
+          color: #ff4d4d;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// Order Detail Modal (unchanged)
+const OrderDetailModal = ({
+  selectedOrder,
+  onClose,
+  formatDateTimeDetailed,
+  safeToFixed
+}: any) => (
+  <div className="modal-overlays" onClick={onClose}>
+    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-header">
+        <h2>{i18n('pages.futures.orderDetails.title')}</h2>
+        <button className="modal-close" onClick={onClose}>
+          <i className="fas fa-times" />
+        </button>
+      </div>
+      <div className="modal-body">
+        <div className="order-detail-section">
+          <div className="detail-header">
+            <span className="detail-pair">
+              {selectedOrder.symbol || selectedOrder.pair}
+            </span>
+            <span
+              className={`detail-direction ${selectedOrder.futuresStatus === "long" || selectedOrder.direction === "BUY UP"
+                ? "buy"
+                : "sell"
+                }`}
+            >
+              {selectedOrder.futuresStatus === "long"
+                ? i18n('pages.futures.actions.buyUp')
+                : selectedOrder.futuresStatus === "short"
+                  ? i18n('pages.futures.actions.buyDown')
+                  : selectedOrder.direction}
+            </span>
+          </div>
+          <div
+            className={`detail-status ${selectedOrder.finalized ? "closed" : "open"
+              }`}
+          >
+            ● {selectedOrder.finalized ? i18n('pages.futures.orderDetails.closed') : i18n('pages.futures.orderDetails.open')}
+          </div>
+        </div>
+
+        <div className="order-detail-section">
+          <OrderDetailRow label={i18n('pages.futures.orderDetails.futuresAmount')} value={`${selectedOrder.futuresAmount || selectedOrder.investment} USD`} />
+
+          {selectedOrder.contractDuration && (
+            <OrderDetailRow label={i18n('pages.futures.orderDetails.contractDuration')} value={`${selectedOrder.contractDuration} ${i18n('pages.futures.orderDetails.seconds')}`} />
+          )}
+
+          <OrderDetailRow
+            label={i18n('pages.futures.orderDetails.futuresStatus')}
+            value={selectedOrder.closePositionTime ? i18n('pages.futures.orderDetails.completed') : i18n('pages.futures.orderDetails.open')}
+          />
+          <OrderDetailRow
+            label={i18n('pages.futures.orderDetails.openPositionPrice')}
+            value={selectedOrder.openPositionPrice || selectedOrder.openPrice}
+          />
+          <OrderDetailRow
+            label={i18n('pages.futures.orderDetails.openPositionTime')}
+            value={formatDateTimeDetailed(selectedOrder.openPositionTime || selectedOrder.openTime)}
+          />
+
+          {selectedOrder.closePositionPrice && (
+            <OrderDetailRow label={i18n('pages.futures.orderDetails.closePositionPrice')} value={selectedOrder.closePositionPrice} />
+          )}
+
+          {selectedOrder.closePositionTime && (
+            <OrderDetailRow
+              label={i18n('pages.futures.orderDetails.closePositionTime')}
+              value={formatDateTimeDetailed(selectedOrder.closePositionTime)}
+            />
+          )}
+
+          <OrderDetailRow
+            label={i18n('pages.futures.orderDetails.profitLossAmount')}
+            value={
+              (selectedOrder.profitAndLossAmount || selectedOrder.pnl)
+                ? `${safeToFixed(selectedOrder.profitAndLossAmount || selectedOrder.pnl, 2)} USD`
+                : "__"
+            }
+            className={selectedOrder.control === "profit" ? "profit" : "loss"}
+          />
+
+          <OrderDetailRow label={i18n('pages.futures.orderDetails.leverage')} value={`${selectedOrder.leverage}X`} />
+        </div>
+      </div>
+      <div className="modal-footer">
+        <button className="modal-button" onClick={onClose}>
+          {i18n('pages.futures.orderDetails.done')}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const OrderDetailRow = ({ label, value, className = "" }: any) => (
+  <div className="detail-row">
+    <span className="detail-label">{label}</span>
+    <span className={`detail-value ${className}`}>{value}</span>
+  </div>
+);
+
+export default Futures;
