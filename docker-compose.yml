@@ -4,7 +4,7 @@ services:
   backend:
     build: ./server
     ports:
-      - 8082:8085
+      - 8082:8082
     restart: unless-stopped
     volumes:
       - upload:/upload
@@ -66,30 +66,30 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
 
-  web1:
-    build: ./graborders
-    ports:
-      - "3010:80"
-    restart: unless-stopped
-    volumes:
-      - "./graborders:/app"
-      - "/app/node_modules"
-    stdin_open: true
-    environment:
-      - CHOKIDAR_USEPOLLING=true
+  # web1:
+  #   build: ./graborders
+  #   ports:
+  #     - "3010:80"
+  #   restart: unless-stopped
+  #   volumes:
+  #     - "./graborders:/app"
+  #     - "/app/node_modules"
+  #   stdin_open: true
+  #   environment:
+  #     - CHOKIDAR_USEPOLLING=true
 
 
-  web2:
-    build: ./PC
-    ports:
-      - "3013:80"
-    restart: unless-stopped
-    volumes:
-      - "./PC:/app"
-      - "/app/node_modules"
-    stdin_open: true
-    environment:
-      - CHOKIDAR_USEPOLLING=true
+  # web2:
+  #   build: ./PC
+  #   ports:
+  #     - "3013:80"
+  #   restart: unless-stopped
+  #   volumes:
+  #     - "./PC:/app"
+  #     - "/app/node_modules"
+  #   stdin_open: true
+  #   environment:
+  #     - CHOKIDAR_USEPOLLING=true
 
   worker:
     build: ./Worker

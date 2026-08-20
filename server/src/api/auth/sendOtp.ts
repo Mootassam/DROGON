@@ -4,7 +4,7 @@ import { otpStore } from './otpStore';
 
 // Resend email service (https://resend.com)
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.OTP_FROM_EMAIL || 'noreply@alvorafx.com';
+const FROM_EMAIL = process.env.OTP_FROM_EMAIL || 'noreply@granndcapital.com';
 const BRAND = 'Finalto';
 
 export default async (req, res, next) => {

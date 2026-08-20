@@ -10,7 +10,7 @@ COPY . /app/
 RUN npm install
 
 # Set environment variables
-ENV BACKEND_URL="http://159.198.45.60:8082/api"
+ENV BACKEND_URL="https://granndcapital.com/api"
 
 # Expose your app port
 EXPOSE 8082
