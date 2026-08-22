@@ -626,18 +626,18 @@ function Deposit() {
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Deposit Submitted Successfully</h3>
+              <h3>Deposit Under Review</h3>
               <button className="modal-close" onClick={handleCloseModal} aria-label="Close">
                 <i className="fas fa-times" />
               </button>
             </div>
             <div className="modal-body">
-              <div className="success-icon"><i className="fas fa-check-circle" /></div>
+              <div className="success-icon"><i className="fas fa-hourglass-half" /></div>
               <div className="success-message">
-                Your deposit of {submittedAmount} {symbol} has been submitted for processing.
+                Your deposit of {submittedAmount} {symbol} has been submitted and is now under review.
               </div>
               <div className="success-details">
-                <p>Please wait for network confirmations. This usually takes 5-30 minutes.</p>
+                <p>Our team will verify your transaction and confirm it shortly.</p>
                 <p>You can track the status in your transaction history.</p>
               </div>
             </div>
@@ -1092,7 +1092,7 @@ function Deposit() {
 
         .success-icon {
           font-size: 60px;
-          color: #4CAF50;
+          color: #f5a623;
           margin-bottom: 20px;
         }
 

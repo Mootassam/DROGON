@@ -1563,7 +1563,7 @@ const en = {
     withdraw: {
       title: "Withdraw",
       message : "Your withdrawal request has been submitted successfully and is being processed. ",
-      announcement: "The minimum withdrawal amount is $50. All withdrawals are processed within 30 minutes.",
+      announcement: "All withdrawals are processed within 24 hours.",
       withdrawAmount: "Withdrawal Amount",
       withdrawPassword: "Withdraw Password",
       availableBalance: "Available balance",
@@ -1574,7 +1574,7 @@ const en = {
         paymentTime: "(2) The payment will be made within the next 1 hour, after withdrawal application has been approved.",
         orderCompletion: "(3) Incomplete daily order submission is subjected to no withdrawal, all products must be submitted for withdrawal"
       },
-      amountPlaceholder: "Enter amount (min. $50)",
+      amountPlaceholder: "Enter amount",
       selectMethod: "Select Withdrawal Method",
       methods: {
         crypto: "Cryptocurrency",

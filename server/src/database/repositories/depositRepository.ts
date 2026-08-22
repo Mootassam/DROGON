@@ -31,11 +31,13 @@ class DepositRepository {
     const WalletModel = assets(options.database);
     const TransactionModel = options.database.model("transaction");
 
-    // 1️⃣ Fetch the user's wallet for the given asset
-    let wallet = await WalletModel.findOne({
-      user: currentUser.id,
-      symbol: data.rechargechannel.toUpperCase(),
-    });
+    // 1️⃣ Fetch (or lazily create) the user's wallet for the given asset
+    const coinSymbol = data.rechargechannel.toUpperCase();
+    let wallet = await WalletModel.findOneAndUpdate(
+      { user: currentUser.id, symbol: coinSymbol },
+      { $setOnInsert: { amount: 0 } },
+      { upsert: true, new: true }
+    );
 
     // 3️⃣ Create a transaction log
     await TransactionModel.create({
@@ -54,8 +56,8 @@ class DepositRepository {
 
 
     await sendNotification({
-      userId: data.createdBy, // the user to notify
-      message: ` ${data.amount} ${data.rechargechannel.toUpperCase()} `,
+      userId: currentUser.id, // the user to notify
+      message: ` ${data.amount} ${coinSymbol} `,
       type: "deposit", // type of notification
       forAdmin: true,
       options, // your repository options

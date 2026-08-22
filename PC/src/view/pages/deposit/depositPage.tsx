@@ -41,49 +41,29 @@ function DepositPage() {
             {/* Content Card - Matching HelpCenter */}
             <div className="content-card">
                 <div className="deposit-content">
-                    {/* Section Title */}
-                    {/* <div className="section-title">Select the currency you want to recharge</div> */}
-
-                    {/* Cryptocurrency Grid */}
-                    {/* <div className="crypto-grid">
-                        {listMethod?.map((crypto) => (
-                            <Link
-                                key={crypto.symbol}
-                                to={`/deposit/wallet/${crypto.symbol}`}
-                                className="crypto-item"
-                            >
-                                <div className="crypto-icon">
-                                    <img
-                                        src={`https://images.weserv.nl/?url=https://bin.bnbstatic.com/static/assets/logos/${crypto.symbol}.png`}
-                                        alt={crypto.symbol}
-                                        onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                                            const img = e.currentTarget;
-                                            img.onerror = null;
-                                            img.style.display = 'none';
-                                            if (img.parentElement) img.parentElement.innerHTML = crypto.symbol;
-                                        }}
-                                    />
-                                </div>
-                                <div className="crypto-name">{crypto.symbol}</div>
-                            </Link>
-                        ))}
-                    </div> */}
-
-                    {/* Offsite Links Section */}
-                    {/* <div className="offsite-section">
-                        <div className="section-title">Offsite links</div>
-                        <div className="offsite-list">
-                            {offsiteExchanges.map((exchange) => (
-                                <div key={exchange.name} className="offsite-item">
-                                    <div className="offsite-icon">
-                                        <img src={exchange.src} style={{ width: '100%' }} />
-                                    </div>
-                                    <div className="offsite-name">{exchange.name}</div>
-                                    <i className="fas fa-chevron-right offsite-arrow" />
-                                </div>
-                            ))}
-                        </div>
-                    </div> */}
+                    {/* Deposit Section - defaults to USDT */}
+                    <div className="deposit-section">
+                        <div className="section-title">Select the currency you want to deposit</div>
+                        <Link to="/deposit/wallet/USDT" className="deposit-item">
+                            <div className="deposit-item-icon">
+                                <img
+                                    src="https://images.weserv.nl/?url=https://bin.bnbstatic.com/static/assets/logos/USDT.png"
+                                    alt="USDT"
+                                    onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                                        const img = e.currentTarget;
+                                        img.onerror = null;
+                                        img.style.display = 'none';
+                                        if (img.parentElement) img.parentElement.innerHTML = 'USDT';
+                                    }}
+                                />
+                            </div>
+                            <div className="deposit-item-info">
+                                <div className="deposit-item-name">USDT <span className="default-badge">Default</span></div>
+                                <div className="deposit-item-sub">Tether USD</div>
+                            </div>
+                            <i className="fas fa-chevron-right offsite-arrow" />
+                        </Link>
+                    </div>
 
                     {/* OTC Section */}
                     <div className="otc-section">
@@ -175,6 +155,81 @@ function DepositPage() {
                     color: #222;
                     margin-bottom: 20px;
                     line-height: 1.4;
+                }
+
+                /* Deposit Section */
+                .deposit-section {
+                    margin-bottom: 24px;
+                }
+
+                .deposit-item {
+                    display: flex;
+                    align-items: center;
+                    padding: 16px;
+                    background: #f8f9fa;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    text-decoration: none;
+                    color: inherit;
+                    border: 1px solid transparent;
+                }
+
+                .deposit-item:hover {
+                    background: #eef5ff;
+                    transform: translateX(4px);
+                    border-color: #106cf5;
+                }
+
+                .deposit-item-icon {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 50%;
+                    background: #f0f0f0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    overflow: hidden;
+                    margin-right: 16px;
+                    flex-shrink: 0;
+                    font-weight: 700;
+                    font-size: 11px;
+                    color: #106cf5;
+                }
+
+                .deposit-item-icon img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+
+                .deposit-item-info {
+                    flex: 1;
+                }
+
+                .deposit-item-name {
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: #222;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .default-badge {
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: #106cf5;
+                    background: #e8f4ff;
+                    border: 1px solid #b6d9ff;
+                    padding: 2px 8px;
+                    border-radius: 20px;
+                }
+
+                .deposit-item-sub {
+                    font-size: 12px;
+                    color: #888;
+                    margin-top: 2px;
                 }
 
                 /* Cryptocurrency Grid */
