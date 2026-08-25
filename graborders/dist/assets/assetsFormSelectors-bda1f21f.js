@@ -1,0 +1,1 @@
+import{y as s}from"./index-82128ca2.js";const e=o=>o.assets.form,t=s([e],o=>o.record),c=s([e],o=>!!o.initLoading),a=s([e],o=>!!o.saveLoading),n=s([e],o=>!!o.showModal),r={selectInitLoading:c,selectSaveLoading:a,selectRecord:t,selectModal:n,selectRaw:e};export{r as c};
