@@ -173,7 +173,7 @@ function Home() {
                   <h4 className="news-title">{truncateText(article.title, 55)}</h4>
                   <p className="news-desc">{truncateText(article.description, 70)}</p>
                   <div className="news-meta">
-                    <span>Finalto News</span>
+                    <span>GrandCapital News</span>
                     {article.pubDate && <span>{formatDate(article.pubDate)}</span>}
                   </div>
                 </div>

@@ -60,7 +60,7 @@ const en = {
   },
 
   app: {
-    title: "Finalto",
+    title: "GrandCapital",
   },
 
   api: {
@@ -658,7 +658,7 @@ const en = {
       }
     },
     home: {
-      logoAlt: "Finalto Logo",
+      logoAlt: "GrandCapital Logo",
       headerAlt: "Crypto Trading Platform",
       slogan: "Profit With Confidence",
       promoAlt: "Promo banner {0}",
@@ -702,8 +702,8 @@ const en = {
       },
 
       nftExploration: {
-        title: "Explore NFTs with Finalto",
-        description: "Step into the world of NFTs with Finalto, your all-in-one digital asset trading wallet. Designed for both beginners and professional traders, Finalto lets you explore, buy, sell, and",
+        title: "Explore NFTs with GrandCapital",
+        description: "Step into the world of NFTs with GrandCapital, your all-in-one digital asset trading wallet. Designed for both beginners and professional traders, GrandCapital lets you explore, buy, sell, and",
       },
 
       stats: {
@@ -814,15 +814,15 @@ const en = {
       announcements: {
         maintenanceNotice: "Maintenance notice",
         contractServerUpgrade: "Contract server upgrade and maintenance announcement on January 15, 2023",
-        binexOptionsMaintenance: "Finalto Options Trading System Maintenance Announcement",
-        clientVersionUpgrade: "Important! Finalto's announcement on the latest client version upgrade",
-        platformTradingAnnouncement: "Finalto platform trading latest announcement",
-        platformUpgradeOptimization: "Finalto Platform Version Upgrade Optimization Update Announcement",
-        march15Upgrade: "March 15, 2023 Finalto platform contract server upgrade maintenance optimization announcement",
-        optionsTradingMaintenance: "Finalto platform options trading system maintenance and optimization announcement",
-        latestVersionUpgrade: "Finalto Platform Important Announcement on the Upgrade and Optimization of the Latest Version of the Client",
-        userSecurityReminder: "Warm reminder about Finalto user information security",
-        perpetualContractUpgrade: "Finalto platform announcement on the optimization and upgrade of the perpetual contract system",
+        binexOptionsMaintenance: "GrandCapital Options Trading System Maintenance Announcement",
+        clientVersionUpgrade: "Important! GrandCapital's announcement on the latest client version upgrade",
+        platformTradingAnnouncement: "GrandCapital platform trading latest announcement",
+        platformUpgradeOptimization: "GrandCapital Platform Version Upgrade Optimization Update Announcement",
+        march15Upgrade: "March 15, 2023 GrandCapital platform contract server upgrade maintenance optimization announcement",
+        optionsTradingMaintenance: "GrandCapital platform options trading system maintenance and optimization announcement",
+        latestVersionUpgrade: "GrandCapital Platform Important Announcement on the Upgrade and Optimization of the Latest Version of the Client",
+        userSecurityReminder: "Warm reminder about GrandCapital user information security",
+        perpetualContractUpgrade: "GrandCapital platform announcement on the optimization and upgrade of the perpetual contract system",
         maintenanceCompletion: "Announcement on the completion of platform system maintenance and optimization",
         bitcoinWithdrawal: "Announcement on Bitcoin Withdrawal",
         tradingPairsUpgrade: "Announcement on the upgrade of some trading currency pairs on the platform",
@@ -838,7 +838,7 @@ const en = {
         decUSDLaunch: "DEC/USD Trading Launch Announcement",
         USDIntroduction: "USD Introduction",
         ethereumNetworkMaintenance: "Ethereum network maintenance notice",
-        projectReviewStandards: "Finalto Project review standards",
+        projectReviewStandards: "GrandCapital Project review standards",
         liquidityMiningUpgrade: "Liquidity Mining Upgrade",
         liquidityMiningFee: "Liquidity mining fee adjustment",
         delistingTradingPairs: "Delisting trading pairs",
@@ -893,7 +893,7 @@ const en = {
     privacy: {
       title: "Privacy Portal",
       hero: {
-        title: "Finalto Privacy Portal",
+        title: "GrandCapital Privacy Portal",
         subtitle: "Protecting your data and privacy with strict guidelines, legal compliance, and industry best practices."
       },
       principles: {
@@ -928,7 +928,7 @@ const en = {
       personalData: {
         title: "What Is Personal Data?",
         definition: "Personal data refers to any information that identifies an individual.",
-        examples: "Examples include: name, Finalto ID, email address, location data, transaction history, and device information."
+        examples: "Examples include: name, GrandCapital ID, email address, location data, transaction history, and device information."
       },
       dataUsage: {
         title: "How We Use Your Data",
@@ -963,7 +963,7 @@ const en = {
       },
       dataSharing: {
         title: "Data Sharing",
-        content: "We may share your data with other Finalto entities or trusted third parties under strict contractual safeguards, only when necessary for the purposes outlined in our Privacy Notice."
+        content: "We may share your data with other GrandCapital entities or trusted third parties under strict contractual safeguards, only when necessary for the purposes outlined in our Privacy Notice."
       },
       cookies: {
         title: "Cookies & Tracking",
@@ -994,21 +994,21 @@ const en = {
     termsOfUse: {
       title: "Terms of Use",
       hero: {
-        title: "Finalto Terms of Use"
+        title: "GrandCapital Terms of Use"
       },
       agreement: {
         title: "Agreement",
-        content: "This is a binding agreement between you (the user) and Finalto. It covers all Finalto Services you access or use."
+        content: "This is a binding agreement between you (the user) and GrandCapital. It covers all GrandCapital Services you access or use."
       },
       riskWarning: {
         title: "Risk Warning",
-        content: "Digital assets are volatile and can fluctuate significantly in value. Finalto is not a broker, financial advisor, or investment advisor. You must conduct your own due diligence before making any financial decisions."
+        content: "Digital assets are volatile and can fluctuate significantly in value. GrandCapital is not a broker, financial advisor, or investment advisor. You must conduct your own due diligence before making any financial decisions."
       },
       aboutServices: {
         title: "About Our Services",
         aboutBINEX: {
-          title: "About Finalto",
-          content: "Finalto provides digital asset exchange, custody services, and related financial services through our platform."
+          title: "About GrandCapital",
+          content: "GrandCapital provides digital asset exchange, custody services, and related financial services through our platform."
         },
         eligibility: {
           title: "Eligibility",
@@ -1016,14 +1016,14 @@ const en = {
         },
         communication: {
           title: "Communication",
-          content: "You must keep your contact information updated. Finalto will contact you via email, SMS, or phone regarding your account and our services."
+          content: "You must keep your contact information updated. GrandCapital will contact you via email, SMS, or phone regarding your account and our services."
         }
       },
       services: {
         title: "Our Services",
         servicesProvided: {
           title: "Services Provided",
-          content: "Finalto offers digital asset trading, secure custody solutions, and customer support through both automated bots and human representatives. User chat functionality is also available."
+          content: "GrandCapital offers digital asset trading, secure custody solutions, and customer support through both automated bots and human representatives. User chat functionality is also available."
         },
         fees: {
           title: "Fees",
@@ -1053,7 +1053,7 @@ const en = {
         },
         transactionCancellation: {
           title: "Transaction Cancellation",
-          content: "Finalto reserves the right to cancel or amend transactions in cases of suspected fraud, errors, or violations of these Terms."
+          content: "GrandCapital reserves the right to cancel or amend transactions in cases of suspected fraud, errors, or violations of these Terms."
         },
         unauthorizedTransactions: {
           title: "Unauthorized Transactions",
@@ -1064,11 +1064,11 @@ const en = {
         title: "Digital Assets",
         supportedAssets: {
           title: "Supported Assets",
-          content: "You may only transact with digital assets explicitly supported by Finalto. Attempting to deposit unsupported assets may result in permanent loss."
+          content: "You may only transact with digital assets explicitly supported by GrandCapital. Attempting to deposit unsupported assets may result in permanent loss."
         },
         forksAirdrops: {
           title: "Forks & Airdrops",
-          content: "Finalto does not guarantee support for blockchain forks, airdrops, or other similar events. Support decisions are made at our sole discretion."
+          content: "GrandCapital does not guarantee support for blockchain forks, airdrops, or other similar events. Support decisions are made at our sole discretion."
         }
       },
       accountSecurity: {
@@ -1080,37 +1080,37 @@ const en = {
       },
       privacy: {
         title: "Privacy",
-        content: "Your privacy is governed by the Finalto Privacy Notice, which explains how we collect, use, and protect your personal information."
+        content: "Your privacy is governed by the GrandCapital Privacy Notice, which explains how we collect, use, and protect your personal information."
       },
       termination: {
         title: "Account Termination",
         terminationSuspension: {
           title: "Termination/Suspension",
-          content: "Finalto may restrict, suspend, or terminate accounts for fraud, law violations, suspicious activity, or Terms violations. Users may close accounts unless frozen or dormant."
+          content: "GrandCapital may restrict, suspend, or terminate accounts for fraud, law violations, suspicious activity, or Terms violations. Users may close accounts unless frozen or dormant."
         }
       },
       prohibitedUse: {
         title: "Prohibited Use",
-        content: "You may not use Finalto services for fraud, market manipulation, illegal activities, unauthorized access, or any purpose that violates applicable laws or these Terms."
+        content: "You may not use GrandCapital services for fraud, market manipulation, illegal activities, unauthorized access, or any purpose that violates applicable laws or these Terms."
       },
       liability: {
         title: "Liability & Intellectual Property",
         liability: {
           title: "Liability",
-          content: "Finalto is not responsible for losses except in cases of proven gross negligence or fraud. We are not liable for market fluctuations, technical issues, or third-party actions."
+          content: "GrandCapital is not responsible for losses except in cases of proven gross negligence or fraud. We are not liable for market fluctuations, technical issues, or third-party actions."
         },
         intellectualProperty: {
           title: "Intellectual Property",
-          content: "Finalto retains all intellectual property rights to our platform, technology, and branding. Users receive a limited license to use our services as outlined in these Terms."
+          content: "GrandCapital retains all intellectual property rights to our platform, technology, and branding. Users receive a limited license to use our services as outlined in these Terms."
         },
         indemnity: {
           title: "Indemnity",
-          content: "You agree to indemnify and hold Finalto harmless against any claims, losses, or damages resulting from your misuse of our services or violation of these Terms."
+          content: "You agree to indemnify and hold GrandCapital harmless against any claims, losses, or damages resulting from your misuse of our services or violation of these Terms."
         }
       },
       importantNotice: {
         title: "Important Notice",
-        content: "By using Finalto services, you acknowledge that you have read, understood, and agree to be bound by these Terms of Use. If you do not agree, you must discontinue use of our services immediately."
+        content: "By using GrandCapital services, you acknowledge that you have read, understood, and agree to be bound by these Terms of Use. If you do not agree, you must discontinue use of our services immediately."
       },
       actionCards: {
         security: {
@@ -1131,7 +1131,7 @@ const en = {
         }
       },
       footer: {
-        copyright: "© 2025 Finalto. All rights reserved.",
+        copyright: "© 2025 GrandCapital. All rights reserved.",
         lastUpdated: "Last updated: 6 May 2025"
       }
     },
@@ -1216,7 +1216,7 @@ const en = {
     invitation: {
       title: "Invite Friends",
       earnTogether: "Earn Together",
-      description: "Invite friends to join Finalto and earn rewards when they sign up and start trading.",
+      description: "Invite friends to join GrandCapital and earn rewards when they sign up and start trading.",
       yourReferralCode: "YOUR REFERRAL CODE",
       loading: "Loading...",
       copied: "COPIED!",
@@ -1317,7 +1317,7 @@ const en = {
         lostDevice: "If your device is lost or stolen, immediately revoke session access from your account settings.",
         phishing: "If you've fallen victim to a phishing attempt, freeze your account and contact support immediately.",
         supportTitle: "24/7 Security Support",
-        supportEmail: "Finalto.helpdesk01@gmail.com"
+        supportEmail: "GrandCapital.helpdesk01@gmail.com"
       },
       resources: {
         title: "Security Resources",
@@ -1371,7 +1371,7 @@ const en = {
         },
         accountActivated: {
           title: "KYC Verification",
-          message: "Hello {0} your KYC documents have been verified you can now enjoy unlimited features on Finalto"
+          message: "Hello {0} your KYC documents have been verified you can now enjoy unlimited features on GrandCapital"
         },
         custom: {
           title: "Notification",
@@ -1672,7 +1672,7 @@ const en = {
       title: "FAQ Center",
       hero: {
         title: "Frequently Asked Questions",
-        subtitle: "Find answers to common questions about using Finalto"
+        subtitle: "Find answers to common questions about using GrandCapital"
       },
       search: {
         placeholder: "Search for answers..."
@@ -1694,7 +1694,7 @@ const en = {
         verificationProcess: "Upload a government-issued ID and a selfie photo. Verification is usually approved within hours."
       },
       steps: {
-        goToWebsite: "Go to https://trade-Finalto.com",
+        goToWebsite: "Go to https://trade-GrandCapital.com",
         clickSignUp: 'Click "Sign Up"',
         enterDetails: "Enter your details",
         verifyEmail: "Verify your email address",
@@ -1744,7 +1744,7 @@ const en = {
         profitLossExplanation: "Calculated based on price difference multiplied by your leverage and position size."
       },
       benefits: {
-        title: "Why Choose Finalto Futures?",
+        title: "Why Choose GrandCapital Futures?",
         hedge: "Hedge against market volatility",
         multiplyProfits: "Multiply profits with leverage",
         tradeBothMarkets: "Trade both rising and falling markets",
@@ -1757,8 +1757,8 @@ const en = {
         joinDiscussions: "Join discussions"
       },
       footer: {
-        copyright: "© 2025 Finalto. All rights reserved.",
-        needHelp: "Need more help? Contact Finalto.helpdesk01@gmail.com"
+        copyright: "© 2025 GrandCapital. All rights reserved.",
+        needHelp: "Need more help? Contact GrandCapital.helpdesk01@gmail.com"
       }
     },
 
