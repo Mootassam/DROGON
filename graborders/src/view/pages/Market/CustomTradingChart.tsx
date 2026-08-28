@@ -95,6 +95,102 @@ function generateHistory(currentPrice: number, symbol: string, tf: TF): Bar[] {
   return bars;
 }
 
+// ── Persistence: remember each symbol/timeframe's candle history across visits ──
+// The candles above are synthetic (no real market-data backend), so without this
+// a client leaving and returning to a symbol would see a brand-new random chart.
+// Instead we save each symbol+timeframe's candles to localStorage and, on return,
+// bridge the elapsed time with a short synthetic walk toward the live price —
+// so the client finds the same chart, extended forward, not a fresh one.
+
+const HISTORY_STORAGE_PREFIX = 'gc_chart_hist_v1_';
+
+function historyKey(symbol: string, tf: TF): string {
+  return HISTORY_STORAGE_PREFIX + symbol + '_' + tf;
+}
+
+function loadStoredCandles(symbol: string, tf: TF): Map<number, OHLC> | null {
+  try {
+    const raw = localStorage.getItem(historyKey(symbol, tf));
+    if (!raw) return null;
+    const entries: [number, OHLC][] = JSON.parse(raw);
+    return entries.length ? new Map(entries) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredCandles(symbol: string, tf: TF, candles: Map<number, OHLC>): void {
+  try {
+    localStorage.setItem(historyKey(symbol, tf), JSON.stringify(Array.from(candles.entries())));
+  } catch {
+    // Storage full/unavailable — chart still works, just won't persist this update.
+  }
+}
+
+/**
+ * Candle map to show for (symbol, tf): the client's previously saved history,
+ * bridged forward to "now" with a short synthetic walk toward currentPrice, or
+ * a freshly generated history if nothing was saved yet for this symbol/tf.
+ */
+function loadOrCreateHistory(symbol: string, tf: TF, currentPrice: number): Map<number, OHLC> {
+  const { bucketMs, count } = TF_CONFIG[tf];
+  const bucketSec = bucketMs / 1000;
+  const stored = loadStoredCandles(symbol, tf);
+
+  if (stored && stored.size > 0) {
+    const keys       = Array.from(stored.keys()).sort((a, b) => a - b);
+    const lastBucket = keys[keys.length - 1];
+    const nowBucket  = getBucket(Date.now(), bucketMs);
+    const missing    = Math.round((nowBucket - lastBucket) / bucketSec);
+
+    if (missing > 0) {
+      const vol       = baseVol(symbol) * TF_VOL_SCALE[tf];
+      const steps      = Math.min(missing, count);
+      const fillStart  = nowBucket - (steps - 1) * bucketSec;
+      let prevClose    = stored.get(lastBucket)!.close;
+
+      for (let i = 0; i < steps; i++) {
+        const bucket = fillStart + i * bucketSec;
+        if (bucket <= lastBucket) continue;
+        const isLast = i === steps - 1;
+        const close  = isLast ? currentPrice
+          : Math.max(prevClose * 0.5, prevClose - (Math.random() - 0.5) * 2 * vol * prevClose);
+        const open   = prevClose;
+        const body   = Math.abs(close - open);
+        const floor  = currentPrice * 0.00005;
+        const wick   = Math.max(body, floor) * (0.5 + Math.random() * 2);
+        stored.set(bucket, {
+          open, close,
+          high: Math.max(open, close) + wick * (0.15 + Math.random() * 0.7),
+          low:  Math.min(open, close) - wick * (0.15 + Math.random() * 0.7),
+        });
+        prevClose = close;
+      }
+    }
+
+    const trimKeys = Array.from(stored.keys()).sort((a, b) => a - b);
+    if (trimKeys.length > count) {
+      for (const k of trimKeys.slice(0, trimKeys.length - count)) stored.delete(k);
+    }
+
+    saveStoredCandles(symbol, tf, stored);
+    return stored;
+  }
+
+  const bars = generateHistory(currentPrice, symbol, tf);
+  const fresh = new Map(bars.map(b => [b.time, { open: b.open, high: b.high, low: b.low, close: b.close }]));
+  saveStoredCandles(symbol, tf, fresh);
+  return fresh;
+}
+
+function applyCandlesToSeries(series: any, chart: any, candles: Map<number, OHLC>): void {
+  const sorted = Array.from(candles.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([t, cd]) => ({ time: t as any, ...cd }));
+  series.setData(sorted as any);
+  chart?.timeScale().scrollToPosition(5, false);
+}
+
 // ── Deterministic injection series (identical on every device) ──────────────────
 //
 // Builds a complete candlestick series (pre-injection history + revealed
@@ -241,6 +337,7 @@ export default function CustomTradingChart({
   const seenNullRef  = useRef(false);
   const histLoadedRef = useRef(false);
   const tickRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickCountRef = useRef(0);
 
   useEffect(() => { livePriceRef.current = livePrice; }, [livePrice]);
   useEffect(() => { tfRef.current = tf; }, [tf]);
@@ -262,11 +359,10 @@ export default function CustomTradingChart({
       if (wasInjecting && seriesRef.current) {
         const lp = livePriceRef.current;
         if (lp && lp > 0) {
-          const bars = generateHistory(lp, symbol, tfRef.current);
-          candlesRef.current = new Map(bars.map(b => [b.time, { open: b.open, high: b.high, low: b.low, close: b.close }]));
-          prevLenRef.current = bars.length;
-          seriesRef.current.setData(bars as any);
-          chartRef.current?.timeScale().scrollToPosition(5, false);
+          const candles = loadOrCreateHistory(symbol, tfRef.current, lp);
+          candlesRef.current = candles;
+          prevLenRef.current = candles.size;
+          applyCandlesToSeries(seriesRef.current, chartRef.current, candles);
         }
       }
     }
@@ -288,11 +384,10 @@ export default function CustomTradingChart({
     if (livePrice === null) { seenNullRef.current = true; return; }
     if (!seenNullRef.current || histLoadedRef.current || !seriesRef.current) return;
     histLoadedRef.current = true;
-    const bars = generateHistory(livePrice, symbol, tf);
-    candlesRef.current = new Map(bars.map(b => [b.time, { open: b.open, high: b.high, low: b.low, close: b.close }]));
-    prevLenRef.current = bars.length;
-    seriesRef.current.setData(bars as any);
-    chartRef.current?.timeScale().scrollToPosition(5, false);
+    const candles = loadOrCreateHistory(symbol, tf, livePrice);
+    candlesRef.current = candles;
+    prevLenRef.current = candles.size;
+    applyCandlesToSeries(seriesRef.current, chartRef.current, candles);
   }, [livePrice, symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Rebuild on timeframe change ─────────────────────────────────────────────
@@ -304,11 +399,10 @@ export default function CustomTradingChart({
     }
     const price = livePriceRef.current;
     if (!price) return;
-    const bars = generateHistory(price, symbol, tf);
-    candlesRef.current = new Map(bars.map(b => [b.time, { open: b.open, high: b.high, low: b.low, close: b.close }]));
-    prevLenRef.current = bars.length;
-    seriesRef.current.setData(bars as any);
-    chartRef.current?.timeScale().scrollToPosition(5, false);
+    const candles = loadOrCreateHistory(symbol, tf, price);
+    candlesRef.current = candles;
+    prevLenRef.current = candles.size;
+    applyCandlesToSeries(seriesRef.current, chartRef.current, candles);
   }, [tf, symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Init chart ──────────────────────────────────────────────────────────────
@@ -345,11 +439,11 @@ export default function CustomTradingChart({
     if (injRef.current) {
       series.setData(buildInjectionSeries(injRef.current, tfRef.current, Date.now()) as any);
     } else if (livePriceRef.current) {
-      const bars = generateHistory(livePriceRef.current, symbol, tfRef.current);
-      candlesRef.current = new Map(bars.map(b => [b.time, { open: b.open, high: b.high, low: b.low, close: b.close }]));
-      prevLenRef.current = bars.length;
+      const candles = loadOrCreateHistory(symbol, tfRef.current, livePriceRef.current);
+      candlesRef.current = candles;
+      prevLenRef.current = candles.size;
       histLoadedRef.current = true;
-      series.setData(bars as any);
+      applyCandlesToSeries(series, chart, candles);
     }
 
     const onResize = () => {
@@ -412,8 +506,12 @@ export default function CustomTradingChart({
           .map(([t, cd]) => ({ time: t as any, ...cd }));
         series.setData(sorted as any);
         prevLenRef.current = currentLen;
+        saveStoredCandles(symbol, tfRef.current, candles);
       } else {
         series.update({ time: bucket as any, ...candles.get(bucket)! } as any);
+        // Periodically persist the still-forming candle too, not just completed ones.
+        tickCountRef.current++;
+        if (tickCountRef.current % 10 === 0) saveStoredCandles(symbol, tfRef.current, candles);
       }
     }, 1000);
 
