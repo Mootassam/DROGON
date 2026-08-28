@@ -19,10 +19,10 @@ type TF = '1m' | '30m' | '1h' | 'D';
 interface TFConfig { bucketMs: number; count: number; }
 
 const TF_CONFIG: Record<TF, TFConfig> = {
-  '1m':  { bucketMs:           60_000, count: 180 },
-  '30m': { bucketMs:    30 * 60_000,   count: 180 },
-  '1h':  { bucketMs:    60 * 60_000,   count: 180 },
-  'D':   { bucketMs: 24 * 60 * 60_000, count: 150 },
+  '1m':  { bucketMs:           60_000, count: 300 },
+  '30m': { bucketMs:    30 * 60_000,   count: 300 },
+  '1h':  { bucketMs:    60 * 60_000,   count: 300 },
+  'D':   { bucketMs: 24 * 60 * 60_000, count: 365 },
 };
 
 interface OHLC { open: number; high: number; low: number; close: number; }
@@ -224,14 +224,14 @@ export default function CustomTradingChart({
   symbol, livePrice, height = 400, priceInjection,
 }: Props) {
 
-  const [tf, setTF] = useState<TF>('1m');
+  const [tf, setTF] = useState<TF>('D');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<any>(null);
   const seriesRef    = useRef<any>(null);
 
   const livePriceRef = useRef<number | null>(livePrice);
-  const tfRef        = useRef<TF>('1m');
+  const tfRef        = useRef<TF>('D');
   const injRef       = useRef<PriceInjection | null>(null);
   const prevInjRef   = useRef<PriceInjection | null>(null);
 
