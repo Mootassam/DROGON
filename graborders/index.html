@@ -24,7 +24,7 @@
 
         // Large device + not a phone/tablet → send to the PC site
         if (!isMobileUA && w >= 1024) {
-          location.replace('https://pc.granndcapital.com/' + location.pathname + location.search + location.hash);
+          location.replace('https://pc.granndcapital.com' + location.pathname + location.search + location.hash);
         }
       } catch (e) {}
     })();

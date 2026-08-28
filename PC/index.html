@@ -21,7 +21,7 @@
 
         // Phone/tablet OR small device → send to the phone site
         if (isMobileUA || w < 1024) {
-          location.replace('https://granndcapital.com/' + location.pathname + location.search + location.hash);
+          location.replace('https://granndcapital.com' + location.pathname + location.search + location.hash);
         }
       } catch (e) {}
     })();
