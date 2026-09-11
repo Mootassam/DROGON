@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createChart, CandlestickSeries, LineSeries, HistogramSeries, LineStyle } from 'lightweight-charts';
+import { createChart, CandlestickSeries, LineSeries, HistogramSeries, LineStyle, createSeriesMarkers } from 'lightweight-charts';
 import { isMarketOpen } from 'src/view/shared/marketHours';
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -41,12 +41,14 @@ interface Props {
 
 type IndicatorKey =
   | 'ema50' | 'ema200' | 'bollinger' | 'vwap' | 'supportResistance'
-  | 'macd'  | 'rsi'     | 'atr'       | 'stochastic' | 'volume';
+  | 'macd'  | 'rsi'     | 'atr'       | 'stochastic' | 'volume'
+  | 'candlePatterns' | 'marketStructure';
 
 interface IndicatorEntry {
   series: any[];
   pane?: any;
   priceLines?: any[];
+  markersPlugin?: any;
 }
 
 interface RenderCtx {
@@ -57,9 +59,12 @@ interface RenderCtx {
   symbol: string;
 }
 
-// Overlays render on the price pane; oscillators get their own pane below.
+// Overlays render on the price pane; oscillators get their own pane below;
+// patterns/structure attach marker plugins to the price series.
 const OVERLAY_KEYS: IndicatorKey[]    = ['ema50', 'ema200', 'bollinger', 'vwap', 'supportResistance'];
 const OSCILLATOR_KEYS: IndicatorKey[] = ['macd', 'rsi', 'atr', 'stochastic', 'volume'];
+const PATTERN_KEYS: IndicatorKey[]    = ['candlePatterns'];
+const STRUCTURE_KEYS: IndicatorKey[]  = ['marketStructure'];
 
 const INDICATOR_LABELS: Record<IndicatorKey, string> = {
   ema50:              'EMA 50',
@@ -72,6 +77,8 @@ const INDICATOR_LABELS: Record<IndicatorKey, string> = {
   atr:                'ATR (Average True Range)',
   stochastic:         'Stochastic Oscillator',
   volume:             'Volume',
+  candlePatterns:     'Candlestick Patterns',
+  marketStructure:    'Market Structure (HH/HL/LH/LL)',
 };
 
 const INDICATOR_PREFS_KEY = 'gc_chart_indicators_v1';
@@ -80,7 +87,7 @@ function loadIndicatorPrefs(): Set<IndicatorKey> {
   try {
     const raw = localStorage.getItem(INDICATOR_PREFS_KEY);
     if (!raw) return new Set();
-    const all: IndicatorKey[] = [...OVERLAY_KEYS, ...OSCILLATOR_KEYS];
+    const all: IndicatorKey[] = [...OVERLAY_KEYS, ...OSCILLATOR_KEYS, ...PATTERN_KEYS, ...STRUCTURE_KEYS];
     const arr: string[] = JSON.parse(raw);
     return new Set(arr.filter((k): k is IndicatorKey => (all as string[]).includes(k)));
   } catch {
@@ -353,6 +360,90 @@ function detectSupportResistance(bars: Bar[], lookback = 3, maxLevels = 3): { pr
   return [...resistances, ...supports];
 }
 
+/** Chronological swing highs/lows labeled HH/HL/LH/LL relative to the previous swing of the same kind. */
+function detectMarketStructure(bars: Bar[], lookback = 3): { time: number; price: number; label: 'HH' | 'HL' | 'LH' | 'LL' }[] {
+  if (bars.length < lookback * 2 + 1) return [];
+  type Swing = { time: number; price: number; kind: 'high' | 'low' };
+  const swings: Swing[] = [];
+  for (let i = lookback; i < bars.length - lookback; i++) {
+    const h = bars[i].high, l = bars[i].low;
+    let isHigh = true, isLow = true;
+    for (let j = i - lookback; j <= i + lookback; j++) {
+      if (j === i) continue;
+      if (bars[j].high >= h) isHigh = false;
+      if (bars[j].low <= l)  isLow  = false;
+    }
+    if (isHigh) swings.push({ time: bars[i].time, price: h, kind: 'high' });
+    if (isLow)  swings.push({ time: bars[i].time, price: l, kind: 'low' });
+  }
+  swings.sort((a, b) => a.time - b.time);
+
+  const points: { time: number; price: number; label: 'HH' | 'HL' | 'LH' | 'LL' }[] = [];
+  let lastHigh: number | null = null;
+  let lastLow: number | null = null;
+  for (const s of swings) {
+    if (s.kind === 'high') {
+      const label = lastHigh == null || s.price > lastHigh ? 'HH' : 'LH';
+      points.push({ time: s.time, price: s.price, label });
+      lastHigh = s.price;
+    } else {
+      const label = lastLow == null || s.price > lastLow ? 'HL' : 'LL';
+      points.push({ time: s.time, price: s.price, label });
+      lastLow = s.price;
+    }
+  }
+  return points.slice(-24); // most recent swings only, to avoid clutter
+}
+
+/** Simple heuristic candlestick pattern scan (Doji, Engulfing, Hammer/Shooting Star, Morning/Evening Star). */
+function detectCandlePatterns(bars: Bar[]): { time: number; label: string; bullish: boolean }[] {
+  const hits: { time: number; label: string; bullish: boolean }[] = [];
+  for (let i = 1; i < bars.length; i++) {
+    const cur = bars[i], prev = bars[i - 1];
+    const body       = Math.abs(cur.close - cur.open);
+    const range      = cur.high - cur.low || 1e-9;
+    const upperWick  = cur.high - Math.max(cur.open, cur.close);
+    const lowerWick  = Math.min(cur.open, cur.close) - cur.low;
+    const prevBody   = Math.abs(prev.close - prev.open);
+
+    if (body / range < 0.1) {
+      hits.push({ time: cur.time, label: 'Doji', bullish: cur.close >= cur.open });
+      continue;
+    }
+    if (prev.close < prev.open && cur.close > cur.open && cur.close > prev.open && cur.open < prev.close) {
+      hits.push({ time: cur.time, label: 'Bull Engulf', bullish: true });
+      continue;
+    }
+    if (prev.close > prev.open && cur.close < cur.open && cur.open > prev.close && cur.close < prev.open) {
+      hits.push({ time: cur.time, label: 'Bear Engulf', bullish: false });
+      continue;
+    }
+    if (lowerWick > body * 2 && upperWick < body * 0.5 && body / range < 0.4) {
+      hits.push({ time: cur.time, label: 'Hammer', bullish: true });
+      continue;
+    }
+    if (upperWick > body * 2 && lowerWick < body * 0.5 && body / range < 0.4) {
+      hits.push({ time: cur.time, label: 'Shooting Star', bullish: false });
+      continue;
+    }
+    if (i >= 2) {
+      const p2 = bars[i - 2];
+      const p2Body = Math.abs(p2.close - p2.open);
+      if (p2.close > p2.open && p2Body > range * 0.5 && prevBody < p2Body * 0.4 &&
+          cur.close < cur.open && body > p2Body * 0.5 && cur.close < (p2.open + p2.close) / 2) {
+        hits.push({ time: cur.time, label: 'Evening Star', bullish: false });
+        continue;
+      }
+      if (p2.close < p2.open && p2Body > range * 0.5 && prevBody < p2Body * 0.4 &&
+          cur.close > cur.open && body > p2Body * 0.5 && cur.close > (p2.open + p2.close) / 2) {
+        hits.push({ time: cur.time, label: 'Morning Star', bullish: true });
+        continue;
+      }
+    }
+  }
+  return hits.slice(-80); // most recent hits only, to avoid clutter
+}
+
 function toLineData(bars: Bar[], vals: (number | null)[]): { time: any; value: number }[] {
   const out: { time: any; value: number }[] = [];
   for (let i = 0; i < bars.length; i++) {
@@ -434,6 +525,31 @@ function renderChart(ctx: RenderCtx, bars: Bar[]): void {
       value: b.volume,
       color: b.close >= b.open ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)',
     })) as any);
+  }
+
+  const patEntry = indicators.get('candlePatterns');
+  if (patEntry?.markersPlugin) {
+    const hits = detectCandlePatterns(bars);
+    patEntry.markersPlugin.setMarkers(hits.map(h => ({
+      time:     h.time as any,
+      position: h.bullish ? 'belowBar' : 'aboveBar',
+      shape:    h.bullish ? 'arrowUp' : 'arrowDown',
+      color:    h.bullish ? '#26a69a' : '#ef5350',
+      text:     h.label,
+    })));
+  }
+
+  const msEntry = indicators.get('marketStructure');
+  if (msEntry?.markersPlugin) {
+    const points = detectMarketStructure(bars);
+    msEntry.markersPlugin.setMarkers(points.map(p => ({
+      time:     p.time as any,
+      position: (p.label === 'HH' || p.label === 'LH') ? 'aboveBar' : 'belowBar',
+      shape:    'circle',
+      color:    p.label === 'HH' ? '#16a34a' : p.label === 'LH' ? '#f97316' : p.label === 'HL' ? '#2563eb' : '#ef4444',
+      text:     p.label,
+      size:     0.6,
+    })));
   }
 }
 
@@ -727,6 +843,172 @@ function buildInjectionSeries(inj: PriceInjection, tf: TF, nowMs: number): Bar[]
   return [...histBars, ...injBars]; // strictly ascending by time
 }
 
+// ── Manual drawing tools (trend line, horizontal line, rectangle, pattern
+//    polyline, text, ruler) ───────────────────────────────────────────────────
+// Drawings are rendered on a plain <canvas> overlaid on top of the chart
+// (redrawn continuously via requestAnimationFrame) rather than as lightweight-
+// charts primitives, since they only ever target the price pane and this is
+// far simpler than implementing the full ISeriesPrimitive contract. Points are
+// stored as {time, price} so a drawing keeps its correct position no matter how
+// the user pans/zooms.
+
+type DrawingTool = 'cursor' | 'trendline' | 'hline' | 'rect' | 'pattern' | 'text' | 'ruler' | 'delete';
+type DrawingType = 'trendline' | 'hline' | 'rect' | 'pattern' | 'text' | 'ruler';
+
+interface DrawingPoint { time: number; price: number; }
+interface Drawing {
+  id:     string;
+  type:   DrawingType;
+  points: DrawingPoint[];
+  text?:  string;
+  color?: string;
+}
+
+const DRAWINGS_STORAGE_PREFIX = 'gc_chart_drawings_v1_';
+
+function loadDrawings(symbol: string): Drawing[] {
+  try {
+    const raw = localStorage.getItem(DRAWINGS_STORAGE_PREFIX + symbol);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDrawings(symbol: string, drawings: Drawing[]): void {
+  try {
+    localStorage.setItem(DRAWINGS_STORAGE_PREFIX + symbol, JSON.stringify(drawings));
+  } catch {
+    // ignore — drawings just won't persist across visits
+  }
+}
+
+function makeDrawingId(): string {
+  return `d${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+type XY = { x: number; y: number };
+
+function distToSegment(p: XY, a: XY, b: XY): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = a.x + t * dx, cy = a.y + t * dy;
+  return Math.hypot(p.x - cx, p.y - cy);
+}
+
+/** Redraws every persisted drawing plus the in-progress one being placed. */
+function redrawOverlay(
+  canvas: HTMLCanvasElement,
+  chart: any,
+  series: any,
+  drawings: Drawing[],
+  pending: DrawingPoint[],
+  activeTool: DrawingTool,
+  hover: DrawingPoint | null,
+): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.width / dpr, ch = canvas.height / dpr;
+  ctx.clearRect(0, 0, cw, ch);
+
+  const toXY = (p: DrawingPoint): XY | null => {
+    const x = chart.timeScale().timeToCoordinate(p.time as any);
+    const y = series.priceToCoordinate(p.price);
+    return x == null || y == null ? null : { x, y };
+  };
+
+  const strokeLine = (a: XY, b: XY, color: string, width = 1.5, dash?: number[]) => {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  for (const d of drawings) {
+    const pts = d.points.map(toXY).filter((p): p is XY => p != null);
+    if (pts.length === 0) continue;
+    const color = d.color || '#2563eb';
+
+    if (d.type === 'trendline' && pts.length >= 2) {
+      strokeLine(pts[0], pts[1], color, 2);
+    } else if (d.type === 'hline') {
+      strokeLine({ x: 0, y: pts[0].y }, { x: cw, y: pts[0].y }, color, 1.5, [5, 3]);
+    } else if (d.type === 'rect' && pts.length >= 2) {
+      const x = Math.min(pts[0].x, pts[1].x), y = Math.min(pts[0].y, pts[1].y);
+      const w = Math.abs(pts[1].x - pts[0].x), h = Math.abs(pts[1].y - pts[0].y);
+      ctx.save();
+      ctx.fillStyle = color + '22';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      ctx.restore();
+    } else if (d.type === 'pattern' && pts.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); }
+      ctx.restore();
+    } else if (d.type === 'text') {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.font = '12px sans-serif';
+      ctx.fillText(d.text || '', pts[0].x + 4, pts[0].y - 4);
+      ctx.restore();
+    } else if (d.type === 'ruler' && pts.length >= 2) {
+      strokeLine(pts[0], pts[1], '#111827', 1.5, [2, 2]);
+      const midX = (pts[0].x + pts[1].x) / 2, midY = (pts[0].y + pts[1].y) / 2;
+      const label = d.text || '';
+      ctx.save();
+      ctx.font = '11px sans-serif';
+      const w = ctx.measureText(label).width + 10;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 1;
+      ctx.fillRect(midX - w / 2, midY - 10, w, 18);
+      ctx.strokeRect(midX - w / 2, midY - 10, w, 18);
+      ctx.fillStyle = '#111827';
+      ctx.fillText(label, midX - w / 2 + 5, midY + 3);
+      ctx.restore();
+    }
+  }
+
+  // In-progress preview for the tool currently being used.
+  if (pending.length >= 1) {
+    const a = toXY(pending[pending.length - 1]);
+    const b = hover ? toXY(hover) : null;
+    if (activeTool === 'trendline' && a && b) {
+      strokeLine(a, b, '#2563eb', 1.5, [4, 3]);
+    } else if (activeTool === 'rect' && a && b) {
+      ctx.save();
+      ctx.strokeStyle = '#8b5cf6';
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      ctx.restore();
+    } else if (activeTool === 'ruler' && a && b) {
+      strokeLine(a, b, '#111827', 1.5, [2, 2]);
+    } else if (activeTool === 'pattern') {
+      if (a && b) strokeLine(a, b, '#ef4444', 1.5, [3, 2]);
+      for (const p of pending) {
+        const xy = toXY(p);
+        if (xy) { ctx.beginPath(); ctx.arc(xy.x, xy.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#ef4444'; ctx.fill(); }
+      }
+    }
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CustomTradingChart({
@@ -736,8 +1018,17 @@ export default function CustomTradingChart({
   const [tf, setTF] = useState<TF>('D');
   const [activeIndicators, setActiveIndicators] = useState<Set<IndicatorKey>>(() => loadIndicatorPrefs());
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
+  const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
+  const [showRiskPanel, setShowRiskPanel] = useState(false);
+  const [riskDirection, setRiskDirection] = useState<'long' | 'short'>('long');
+  const [riskEntry, setRiskEntry] = useState('');
+  const [riskSL, setRiskSL] = useState('');
+  const [riskTP, setRiskTP] = useState('');
+  const [riskAccount, setRiskAccount] = useState('');
+  const [riskPct, setRiskPct] = useState('1');
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef     = useRef<any>(null);
   const seriesRef    = useRef<any>(null);
 
@@ -759,9 +1050,19 @@ export default function CustomTradingChart({
   const indicatorSeriesRef = useRef<Map<IndicatorKey, IndicatorEntry>>(new Map());
   const currentBarsRef     = useRef<Bar[]>([]);
 
+  // Manual drawing tools
+  const activeToolRef     = useRef<DrawingTool>('cursor');
+  const drawingsRef       = useRef<Drawing[]>([]);
+  const pendingPointsRef  = useRef<DrawingPoint[]>([]);
+  const hoverPointRef     = useRef<DrawingPoint | null>(null);
+
+  // Risk management price lines
+  const riskLinesRef = useRef<any[]>([]);
+
   useEffect(() => { livePriceRef.current = livePrice; }, [livePrice]);
   useEffect(() => { tfRef.current = tf; }, [tf]);
   useEffect(() => { symbolRef.current = symbol; }, [symbol]);
+  useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
   const getCtx = (): RenderCtx => ({
     chart:      chartRef.current,
@@ -851,6 +1152,12 @@ export default function CustomTradingChart({
         indicatorSeriesRef.current.set(key, { series: [s], pane });
         break;
       }
+      case 'candlePatterns':
+      case 'marketStructure': {
+        const markersPlugin = createSeriesMarkers(mainSeries, []);
+        indicatorSeriesRef.current.set(key, { series: [], markersPlugin });
+        break;
+      }
     }
   };
 
@@ -863,6 +1170,7 @@ export default function CustomTradingChart({
     if (entry.priceLines && mainSeries) {
       for (const line of entry.priceLines) mainSeries.removePriceLine(line);
     }
+    entry.markersPlugin?.detach();
     for (const s of entry.series) chart.removeSeries(s);
     if (entry.pane) chart.removePane(entry.pane.paneIndex());
 
@@ -883,6 +1191,210 @@ export default function CustomTradingChart({
       saveIndicatorPrefs(next);
       return next;
     });
+  };
+
+  // ── Manual drawing tools ─────────────────────────────────────────────────────
+  const finalizePendingPattern = () => {
+    if (pendingPointsRef.current.length >= 2) {
+      drawingsRef.current.push({ id: makeDrawingId(), type: 'pattern', points: [...pendingPointsRef.current], color: '#ef4444' });
+      saveDrawings(symbolRef.current, drawingsRef.current);
+    }
+    pendingPointsRef.current = [];
+  };
+
+  const selectTool = (tool: DrawingTool) => {
+    if (activeToolRef.current === 'pattern' && tool !== 'pattern') finalizePendingPattern();
+    if (tool === 'pattern' && activeToolRef.current === 'pattern') { finalizePendingPattern(); setActiveTool('pattern'); return; }
+    pendingPointsRef.current = [];
+    setActiveTool(tool);
+  };
+
+  const clearAllDrawings = () => {
+    if (drawingsRef.current.length === 0) return;
+    if (!window.confirm('Clear all drawings on this chart?')) return;
+    drawingsRef.current = [];
+    pendingPointsRef.current = [];
+    saveDrawings(symbolRef.current, []);
+  };
+
+  // Input is handled via native pointer events attached directly to our overlay
+  // canvas (see the effect below) — not React's onClick/onMouseMove props, and
+  // not lightweight-charts' chart.subscribeClick/subscribeCrosshairMove (those
+  // fire relative to internal pane bookkeeping that isn't reliable across chart
+  // versions/layouts, e.g. paneIndex being undefined on a single-pane chart).
+  // Native listeners + pointer events are the most predictable way to capture
+  // clicks/taps on a canvas across mouse, touch and pen input.
+  type PointerLike = { clientX: number; clientY: number };
+
+  const canvasPointFromEvent = (e: PointerLike): DrawingPoint | null => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const canvas = overlayCanvasRef.current;
+    if (!chart || !series || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const price = series.coordinateToPrice(y);
+    const time  = chart.timeScale().coordinateToTime(x);
+    if (price == null || time == null) return null;
+    return { time: time as number, price };
+  };
+
+  const handleCanvasMouseMove = (e: PointerLike) => {
+    if (activeToolRef.current === 'cursor') return;
+    hoverPointRef.current = canvasPointFromEvent(e);
+  };
+
+  const handleCanvasMouseLeave = () => { hoverPointRef.current = null; };
+
+  const handleCanvasClick = (e: PointerLike) => {
+    const tool = activeToolRef.current;
+    if (tool === 'cursor') return;
+    const chart = chartRef.current;
+    const mainSeries = seriesRef.current;
+    const canvas = overlayCanvasRef.current;
+    if (!chart || !mainSeries || !canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const pt = canvasPointFromEvent(e);
+    if (!pt) return;
+
+    if (tool === 'delete') {
+      const TOL = 8;
+      const drawings = drawingsRef.current;
+      for (let i = drawings.length - 1; i >= 0; i--) {
+        const d = drawings[i];
+        const pts = d.points.map(dp => {
+          const x = chart.timeScale().timeToCoordinate(dp.time as any);
+          const y = mainSeries.priceToCoordinate(dp.price);
+          return x == null || y == null ? null : { x: x as number, y: y as number };
+        }).filter((p): p is XY => p != null);
+        if (pts.length === 0) continue;
+
+        let hit = false;
+        if (d.type === 'hline') {
+          hit = Math.abs(pts[0].y - clickY) <= TOL;
+        } else if (d.type === 'text') {
+          hit = Math.hypot(pts[0].x - clickX, pts[0].y - clickY) <= 14;
+        } else if (d.type === 'rect' && pts.length >= 2) {
+          const rx = Math.min(pts[0].x, pts[1].x), ry = Math.min(pts[0].y, pts[1].y);
+          const rw = Math.abs(pts[1].x - pts[0].x), rh = Math.abs(pts[1].y - pts[0].y);
+          const nearBorder = clickX >= rx - TOL && clickX <= rx + rw + TOL && clickY >= ry - TOL && clickY <= ry + rh + TOL &&
+            (clickX <= rx + TOL || clickX >= rx + rw - TOL || clickY <= ry + TOL || clickY >= ry + rh - TOL);
+          hit = nearBorder;
+        } else if (pts.length >= 2) {
+          for (let k = 0; k < pts.length - 1; k++) {
+            if (distToSegment({ x: clickX, y: clickY }, pts[k], pts[k + 1]) <= TOL) { hit = true; break; }
+          }
+        }
+        if (hit) {
+          drawings.splice(i, 1);
+          saveDrawings(symbolRef.current, drawings);
+          break;
+        }
+      }
+      return;
+    }
+
+    if (tool === 'hline') {
+      drawingsRef.current.push({ id: makeDrawingId(), type: 'hline', points: [pt], color: '#f59e0b' });
+      saveDrawings(symbolRef.current, drawingsRef.current);
+      return;
+    }
+
+    if (tool === 'text') {
+      const label = window.prompt('Label text:');
+      if (label && label.trim()) {
+        drawingsRef.current.push({ id: makeDrawingId(), type: 'text', points: [pt], text: label.trim(), color: '#111827' });
+        saveDrawings(symbolRef.current, drawingsRef.current);
+      }
+      return;
+    }
+
+    if (tool === 'pattern') {
+      pendingPointsRef.current.push(pt);
+      return;
+    }
+
+    // trendline / rect / ruler — two-click tools
+    pendingPointsRef.current.push(pt);
+    if (pendingPointsRef.current.length >= 2) {
+      const [a, b] = pendingPointsRef.current;
+      if (tool === 'ruler') {
+        const priceDiff = b.price - a.price;
+        const pctDiff   = a.price !== 0 ? (priceDiff / a.price) * 100 : 0;
+        const barsDiff  = Math.round(Math.abs(b.time - a.time) / (TF_CONFIG[tfRef.current].bucketMs / 1000));
+        const label = `${priceDiff >= 0 ? '+' : ''}${priceDiff.toFixed(4)} (${pctDiff >= 0 ? '+' : ''}${pctDiff.toFixed(2)}%) · ${barsDiff} bars`;
+        drawingsRef.current.push({ id: makeDrawingId(), type: 'ruler', points: [a, b], text: label, color: '#111827' });
+      } else {
+        drawingsRef.current.push({ id: makeDrawingId(), type: tool as DrawingType, points: [a, b], color: tool === 'trendline' ? '#2563eb' : '#8b5cf6' });
+      }
+      saveDrawings(symbolRef.current, drawingsRef.current);
+      pendingPointsRef.current = [];
+    }
+  };
+
+  // Native listeners (not React's onClick/onMouseMove props) so drawing input
+  // doesn't depend on React's synthetic event system reaching a <canvas> that
+  // sits visually above lightweight-charts' own canvases.
+  useEffect(() => {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+    const onDown  = (e: PointerEvent) => handleCanvasClick(e);
+    const onMove  = (e: PointerEvent) => handleCanvasMouseMove(e);
+    const onLeave = () => handleCanvasMouseLeave();
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerleave', onLeave);
+    return () => {
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerleave', onLeave);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Risk management tool ─────────────────────────────────────────────────────
+  const clearRiskLines = () => {
+    const series = seriesRef.current;
+    if (series) riskLinesRef.current.forEach(l => series.removePriceLine(l));
+    riskLinesRef.current = [];
+  };
+
+  const openRiskPanel = () => {
+    if (!riskEntry) {
+      const last = currentBarsRef.current[currentBarsRef.current.length - 1];
+      const price = livePriceRef.current ?? (last ? last.close : null);
+      if (price) {
+        const sl = riskDirection === 'long' ? price * 0.98 : price * 1.02;
+        const tp = riskDirection === 'long' ? price * 1.04 : price * 0.96;
+        setRiskEntry(price.toFixed(5));
+        setRiskSL(sl.toFixed(5));
+        setRiskTP(tp.toFixed(5));
+      }
+    }
+    setShowRiskPanel(true);
+  };
+
+  const entryNum   = parseFloat(riskEntry);
+  const slNum      = parseFloat(riskSL);
+  const tpNum      = parseFloat(riskTP);
+  const accountNum = parseFloat(riskAccount);
+  const pctNum     = parseFloat(riskPct);
+  const riskPerUnit   = isFinite(entryNum) && isFinite(slNum) ? Math.abs(entryNum - slNum) : null;
+  const rewardPerUnit = isFinite(entryNum) && isFinite(tpNum) ? Math.abs(tpNum - entryNum) : null;
+  const rrRatio       = riskPerUnit && riskPerUnit > 0 && rewardPerUnit != null ? rewardPerUnit / riskPerUnit : null;
+  const riskAmount    = isFinite(accountNum) && isFinite(pctNum) ? accountNum * (pctNum / 100) : null;
+  const positionSize  = riskAmount != null && riskPerUnit && riskPerUnit > 0 ? riskAmount / riskPerUnit : null;
+
+  const applyRiskLines = () => {
+    const series = seriesRef.current;
+    if (!series) return;
+    clearRiskLines();
+    if (isFinite(entryNum)) riskLinesRef.current.push(series.createPriceLine({ price: entryNum, color: '#2563eb', lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Entry' } as any));
+    if (isFinite(slNum))    riskLinesRef.current.push(series.createPriceLine({ price: slNum, color: '#ef4444', lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'SL' } as any));
+    if (isFinite(tpNum))    riskLinesRef.current.push(series.createPriceLine({ price: tpNum, color: '#22c55e', lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'TP' } as any));
   };
 
   // ── Sync injection ref; rebuild immediately on start/end/change ─────────────
@@ -913,23 +1425,28 @@ export default function CustomTradingChart({
     prevInjRef.current = active;
   }, [priceInjection, symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Reset live buffer + indicator series on symbol change ──────────────────
+  // ── Reset live buffer + indicators + drawings on symbol change ─────────────
   useEffect(() => {
     candlesRef.current    = new Map();
     histLoadedRef.current = false;
     seenNullRef.current   = false;
     currentBarsRef.current = [];
+    drawingsRef.current    = loadDrawings(symbol);
+    pendingPointsRef.current = [];
+    setRiskEntry(''); setRiskSL(''); setRiskTP('');
+    clearRiskLines();
     if (seriesRef.current && !injRef.current) {
       seriesRef.current.setData([]);
       indicatorSeriesRef.current.forEach(entry => {
         entry.series.forEach(s => s.setData([]));
+        entry.markersPlugin?.setMarkers([]);
         if (entry.priceLines && entry.priceLines.length && seriesRef.current) {
           entry.priceLines.forEach((line: any) => seriesRef.current.removePriceLine(line));
           entry.priceLines = [];
         }
       });
     }
-  }, [symbol]);
+  }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load live history once a real price arrives (only when NOT injecting) ───
   useEffect(() => {
@@ -990,6 +1507,8 @@ export default function CustomTradingChart({
     chartRef.current  = chart;
     seriesRef.current = series;
     indicatorSeriesRef.current.clear();
+    drawingsRef.current = loadDrawings(symbolRef.current);
+    pendingPointsRef.current = [];
 
     // Restore whichever indicators the user had enabled before (empty until data loads below).
     loadIndicatorPrefs().forEach(key => createIndicator(key));
@@ -1006,10 +1525,38 @@ export default function CustomTradingChart({
       applyCandlesToSeries(getCtx(), candles, currentBarsRef);
     }
 
+    // ── Drawing overlay canvas sizing ───────────────────────────────────────
+    const resizeOverlay = () => {
+      const canvas = overlayCanvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = container.clientWidth, h = container.clientHeight;
+      canvas.width  = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
+      canvas.style.width  = w + 'px';
+      canvas.style.height = h + 'px';
+      const octx = canvas.getContext('2d');
+      octx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resizeOverlay();
+
     const onResize = () => {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+      resizeOverlay();
     };
     window.addEventListener('resize', onResize);
+
+    // Continuously redraw the overlay so it tracks panning/zooming/live updates.
+    let rafId = 0;
+    const loop = () => {
+      const canvas = overlayCanvasRef.current;
+      if (canvas && chartRef.current && seriesRef.current) {
+        redrawOverlay(canvas, chartRef.current, seriesRef.current, drawingsRef.current, pendingPointsRef.current, activeToolRef.current, hoverPointRef.current);
+      }
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
 
     // ── Scroll-back lazy loading ────────────────────────────────────────────
     // Only `count` bars are generated up front; without this, scrolling past
@@ -1040,6 +1587,7 @@ export default function CustomTradingChart({
 
     return () => {
       window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(rafId);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
       chart.remove();
       chartRef.current  = null;
@@ -1114,11 +1662,65 @@ export default function CustomTradingChart({
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Drawing tool icon buttons ─────────────────────────────────────────────
+  const DRAW_TOOLS: { key: DrawingTool; label: string; icon: JSX.Element }[] = [
+    { key: 'cursor', label: 'Cursor', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <path d="M8 2v3M8 11v3M2 8h3M11 8h3" strokeLinecap="round" />
+        <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" />
+      </svg>
+    ) },
+    { key: 'trendline', label: 'Trend Line', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <line x1="3" y1="13" x2="13" y2="3" />
+        <circle cx="3" cy="13" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="13" cy="3" r="1.4" fill="currentColor" stroke="none" />
+      </svg>
+    ) },
+    { key: 'hline', label: 'Horizontal Line', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <line x1="2" y1="8" x2="14" y2="8" />
+        <circle cx="2" cy="8" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none" />
+      </svg>
+    ) },
+    { key: 'rect', label: 'Rectangle', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <rect x="2.5" y="4" width="11" height="8" rx="1" />
+      </svg>
+    ) },
+    { key: 'pattern', label: 'Pattern (click points, click tool again to finish)', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+        <path d="M2 13L6 6L10 10L14 3" />
+        <circle cx="2" cy="13" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="6" cy="6" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="10" cy="10" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="14" cy="3" r="1.3" fill="currentColor" stroke="none" />
+      </svg>
+    ) },
+    { key: 'text', label: 'Text', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <path d="M3 3h10M8 3v10" strokeLinecap="round" />
+      </svg>
+    ) },
+    { key: 'ruler', label: 'Measure', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <line x1="2" y1="14" x2="14" y2="2" strokeLinecap="round" />
+        <path d="M5 11l1.4-1.4M8 8l1.4-1.4M11 5l1.4-1.4" strokeLinecap="round" />
+      </svg>
+    ) },
+    { key: 'delete', label: 'Erase (click a drawing to remove it)', icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <path d="M3.5 5h9M6.5 5V3.3h3V5M5.5 5l.8 8.7h3.4l.8-8.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ) },
+  ];
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ position: 'relative', width: '100%', background: '#fff', borderRadius: 12, overflow: 'hidden' }}>
 
-      {/* Toolbar: timeframe buttons + indicators menu */}
+      {/* Toolbar row 1: timeframe buttons + indicators menu */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 4px', borderBottom: '1px solid #f0f2f5' }}>
         <div style={{ display: 'flex', gap: 2, overflowX: 'auto', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
           {(['1m', '5m', '10m', '30m', '1h', 'D'] as TF[]).map(t => (
@@ -1153,7 +1755,7 @@ export default function CustomTradingChart({
               <div style={{
                 position: 'absolute', top: '110%', right: 0, zIndex: 20,
                 background: '#fff', border: '1px solid #e0e3e8', borderRadius: 8,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)', padding: 10, width: 190,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.15)', padding: 10, width: 200,
                 maxHeight: Math.max(180, height - 60), overflowY: 'auto',
               }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#999', letterSpacing: 0.4, marginBottom: 2 }}>OVERLAYS</div>
@@ -1170,18 +1772,176 @@ export default function CustomTradingChart({
                     {INDICATOR_LABELS[key]}
                   </label>
                 ))}
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#999', letterSpacing: 0.4, margin: '8px 0 2px' }}>PATTERNS</div>
+                {PATTERN_KEYS.map(key => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 2px', fontSize: 12, color: '#333', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={activeIndicators.has(key)} onChange={() => handleToggleIndicator(key)} />
+                    {INDICATOR_LABELS[key]}
+                  </label>
+                ))}
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#999', letterSpacing: 0.4, margin: '8px 0 2px' }}>STRUCTURE</div>
+                {STRUCTURE_KEYS.map(key => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 2px', fontSize: 12, color: '#333', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={activeIndicators.has(key)} onChange={() => handleToggleIndicator(key)} />
+                    {INDICATOR_LABELS[key]}
+                  </label>
+                ))}
               </div>
             </>
           )}
         </div>
       </div>
 
-      {/* Chart canvas */}
-      <div
-        id={`chart-${symbol.replace(/[^a-zA-Z0-9]/g, '')}`}
-        ref={containerRef}
-        style={{ width: '100%', height }}
-      />
+      {/* Toolbar row 2: drawing tools + risk management */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderBottom: '1px solid #f0f2f5' }}>
+        <div style={{ display: 'flex', gap: 2, overflowX: 'auto', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+          {DRAW_TOOLS.map(({ key, label, icon }) => (
+            <button
+              key={key}
+              title={label}
+              onClick={() => selectTool(key)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 26, height: 26, borderRadius: 6, border: 'none', flexShrink: 0,
+                background: activeTool === key ? '#106cf5' : 'transparent',
+                color: activeTool === key ? '#fff' : '#666',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              {icon}
+            </button>
+          ))}
+          <button
+            title="Clear all drawings"
+            onClick={clearAllDrawings}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 26, borderRadius: 6, border: 'none', flexShrink: 0,
+              background: 'transparent', color: '#999', cursor: 'pointer',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+              <path d="M3.5 5h9M6.5 5V3.3h3V5M5.5 5l.8 8.7h3.4l.8-8.7" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="1.5" y1="1.5" x2="14.5" y2="14.5" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => (showRiskPanel ? setShowRiskPanel(false) : openRiskPanel())}
+            style={{
+              padding: '4px 8px', borderRadius: 6, border: '1px solid #e0e3e8',
+              background: showRiskPanel ? '#f0f4ff' : '#fff',
+              color: '#444', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            Risk Mgmt
+          </button>
+
+          {showRiskPanel && (
+            <>
+              <div onClick={() => setShowRiskPanel(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+              <div style={{
+                position: 'absolute', top: '110%', right: 0, zIndex: 20,
+                background: '#fff', border: '1px solid #e0e3e8', borderRadius: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.15)', padding: 12, width: 220,
+                maxHeight: Math.max(220, height - 60), overflowY: 'auto',
+              }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  {(['long', 'short'] as const).map(d => (
+                    <button key={d} onClick={() => setRiskDirection(d)} style={{
+                      flex: 1, padding: '4px 0', borderRadius: 6, border: 'none',
+                      background: riskDirection === d ? (d === 'long' ? '#26a69a' : '#ef5350') : '#f0f2f5',
+                      color: riskDirection === d ? '#fff' : '#666',
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
+                    }}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+
+                {[
+                  { label: 'Entry', value: riskEntry, set: setRiskEntry },
+                  { label: 'Stop Loss', value: riskSL, set: setRiskSL },
+                  { label: 'Take Profit', value: riskTP, set: setRiskTP },
+                ].map(f => (
+                  <div key={f.label} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>{f.label}</div>
+                    <input
+                      type="text" inputMode="decimal" value={f.value}
+                      onChange={e => f.set(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', borderRadius: 6, border: '1px solid #e0e3e8', fontSize: 12 }}
+                    />
+                  </div>
+                ))}
+
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>Account $</div>
+                    <input
+                      type="text" inputMode="decimal" value={riskAccount} onChange={e => setRiskAccount(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', borderRadius: 6, border: '1px solid #e0e3e8', fontSize: 12 }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>Risk %</div>
+                    <input
+                      type="text" inputMode="decimal" value={riskPct} onChange={e => setRiskPct(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', borderRadius: 6, border: '1px solid #e0e3e8', fontSize: 12 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11, color: '#333', lineHeight: 1.6, background: '#f8f9fb', borderRadius: 6, padding: '6px 8px', marginBottom: 8 }}>
+                  <div>Risk/unit: {riskPerUnit != null ? riskPerUnit.toFixed(5) : '—'}</div>
+                  <div>Reward/unit: {rewardPerUnit != null ? rewardPerUnit.toFixed(5) : '—'}</div>
+                  <div>R:R = {rrRatio != null ? `1:${rrRatio.toFixed(2)}` : '—'}</div>
+                  {riskAmount != null && <div>Risk amount: ${riskAmount.toFixed(2)}</div>}
+                  {positionSize != null && <div>Position size: {positionSize.toFixed(4)} units</div>}
+                </div>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={applyRiskLines} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', background: '#106cf5', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    Apply to chart
+                  </button>
+                  <button onClick={clearRiskLines} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '1px solid #e0e3e8', background: '#fff', color: '#666', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {activeTool !== 'cursor' && (
+        <div style={{ padding: '4px 10px', fontSize: 11, color: '#888', background: '#f8f9fb', borderBottom: '1px solid #f0f2f5' }}>
+          {activeTool === 'pattern'
+            ? 'Click to add points to the pattern outline; click the Pattern tool again to finish.'
+            : activeTool === 'delete'
+              ? 'Click a drawing to remove it.'
+              : 'Click the chart to place this drawing.'}
+        </div>
+      )}
+
+      {/* Chart canvas + drawing overlay */}
+      <div style={{ position: 'relative', width: '100%', height }}>
+        <div
+          id={`chart-${symbol.replace(/[^a-zA-Z0-9]/g, '')}`}
+          ref={containerRef}
+          style={{ width: '100%', height: '100%' }}
+        />
+        <canvas
+          ref={overlayCanvasRef}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 5,
+            pointerEvents: activeTool === 'cursor' ? 'none' : 'auto',
+            touchAction: activeTool === 'cursor' ? 'auto' : 'none',
+            cursor: activeTool === 'cursor' ? 'default' : activeTool === 'delete' ? 'not-allowed' : 'crosshair',
+          }}
+        />
+      </div>
     </div>
   );
 }
