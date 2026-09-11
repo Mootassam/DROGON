@@ -7,6 +7,11 @@ const permissions = Permissions.values;
 const pcRoutes = [
   {
     path: "/",
+    loader: () => import("src/view/pages/Home/LandingPage"),
+    exact: true,
+  },
+  {
+    path: "/trading",
     loader: () => import("src/view/pages/Pc/PcTrading"),
     exact: true,
   },

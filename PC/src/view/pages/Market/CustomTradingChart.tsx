@@ -104,6 +104,11 @@ function generateHistory(currentPrice: number, symbol: string, tf: TF): Bar[] {
 
 const HISTORY_STORAGE_PREFIX = 'gc_chart_hist_v1_';
 
+// Cap on persisted history per symbol/timeframe. Higher than the initial
+// generation length so bars added by scroll-back lazy-loading (below) survive
+// across visits instead of being trimmed back down on the next load.
+const MAX_STORED_BARS = 5000;
+
 function historyKey(symbol: string, tf: TF): string {
   return HISTORY_STORAGE_PREFIX + symbol + '_' + tf;
 }
@@ -169,8 +174,8 @@ function loadOrCreateHistory(symbol: string, tf: TF, currentPrice: number): Map<
     }
 
     const trimKeys = Array.from(stored.keys()).sort((a, b) => a - b);
-    if (trimKeys.length > count) {
-      for (const k of trimKeys.slice(0, trimKeys.length - count)) stored.delete(k);
+    if (trimKeys.length > MAX_STORED_BARS) {
+      for (const k of trimKeys.slice(0, trimKeys.length - MAX_STORED_BARS)) stored.delete(k);
     }
 
     saveStoredCandles(symbol, tf, stored);
@@ -181,6 +186,48 @@ function loadOrCreateHistory(symbol: string, tf: TF, currentPrice: number): Map<
   const fresh = new Map(bars.map(b => [b.time, { open: b.open, high: b.high, low: b.low, close: b.close }]));
   saveStoredCandles(symbol, tf, fresh);
   return fresh;
+}
+
+/**
+ * Generates `addCount` more synthetic candles further back in time than the
+ * earliest candle currently held, contiguous with it (the new segment's last
+ * close feeds forward into the existing earliest candle's open) — used to
+ * satisfy scroll-back requests past the initially loaded history so the user
+ * never hits a blank wall when scrolling left.
+ */
+function prependHistory(symbol: string, tf: TF, candles: Map<number, OHLC>, addCount: number): Map<number, OHLC> {
+  const { bucketMs } = TF_CONFIG[tf];
+  const bucketSec = bucketMs / 1000;
+  const keys = Array.from(candles.keys()).sort((a, b) => a - b);
+  if (keys.length === 0) return candles;
+
+  const earliestBucket = keys[0];
+  const anchor = candles.get(earliestBucket)!.open;
+  const vol    = baseVol(symbol) * TF_VOL_SCALE[tf];
+
+  const closes: number[] = [anchor];
+  for (let i = 1; i <= addCount; i++) {
+    const prev  = closes[i - 1];
+    const delta = (Math.random() - 0.5) * 2 * vol * prev;
+    closes.push(Math.max(prev * 0.5, prev - delta));
+  }
+
+  for (let i = 0; i < addCount; i++) {
+    const bucket = earliestBucket - (i + 1) * bucketSec;
+    const close  = closes[i];
+    const open   = closes[i + 1];
+    const body   = Math.abs(close - open);
+    const floor  = anchor * 0.00005;
+    const wick   = Math.max(body, floor) * (0.5 + Math.random() * 2);
+    candles.set(bucket, {
+      open, close,
+      high: Math.max(open, close) + wick * (0.15 + Math.random() * 0.7),
+      low:  Math.min(open, close) - wick * (0.15 + Math.random() * 0.7),
+    });
+  }
+
+  saveStoredCandles(symbol, tf, candles);
+  return candles;
 }
 
 function applyCandlesToSeries(series: any, chart: any, candles: Map<number, OHLC>): void {
@@ -328,8 +375,10 @@ export default function CustomTradingChart({
 
   const livePriceRef = useRef<number | null>(livePrice);
   const tfRef        = useRef<TF>('D');
+  const symbolRef    = useRef(symbol);
   const injRef       = useRef<PriceInjection | null>(null);
   const prevInjRef   = useRef<PriceInjection | null>(null);
+  const isExtendingRef = useRef(false);
 
   // Live (non-injection) candle buffer
   const candlesRef   = useRef<Map<number, OHLC>>(new Map());
@@ -341,6 +390,7 @@ export default function CustomTradingChart({
 
   useEffect(() => { livePriceRef.current = livePrice; }, [livePrice]);
   useEffect(() => { tfRef.current = tf; }, [tf]);
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
 
   // ── Sync injection ref; rebuild immediately on start/end/change ─────────────
   useEffect(() => {
@@ -412,7 +462,7 @@ export default function CustomTradingChart({
     const chart = createChart(containerRef.current, {
       width:  containerRef.current.clientWidth,
       height,
-      layout: { background: { color: '#ffffff' }, textColor: '#666', fontSize: 12 },
+      layout: { background: { color: '#ffffff' }, textColor: '#666', fontSize: 12, attributionLogo: false },
       grid:   { vertLines: { color: '#f0f2f5' }, horzLines: { color: '#f0f2f5' } },
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: '#e0e3e8', scaleMargins: { top: 0.08, bottom: 0.08 } },
@@ -451,8 +501,36 @@ export default function CustomTradingChart({
     };
     window.addEventListener('resize', onResize);
 
+    // ── Scroll-back lazy loading ────────────────────────────────────────────
+    // Only `count` bars are generated up front; without this, scrolling past
+    // the oldest loaded candle hits a blank wall. When the visible range nears
+    // the start of the data, silently prepend more synthetic history and shift
+    // the visible range by the same amount so the scroll position doesn't jump.
+    const LOAD_BACK_THRESHOLD = 15;
+    const LOAD_BACK_COUNT     = 200;
+    const handleVisibleRangeChange = (range: { from: number; to: number } | null) => {
+      if (!range || range.from > LOAD_BACK_THRESHOLD) return;
+      if (injRef.current || isExtendingRef.current) return;
+      const candles = candlesRef.current;
+      if (candles.size === 0 || candles.size >= MAX_STORED_BARS) return;
+
+      isExtendingRef.current = true;
+      const extended = prependHistory(symbolRef.current, tfRef.current, candles, LOAD_BACK_COUNT);
+      candlesRef.current = extended;
+      prevLenRef.current = extended.size;
+
+      const sorted = Array.from(extended.entries()).sort(([a], [b]) => a - b)
+        .map(([t, cd]) => ({ time: t as any, ...cd }));
+      series.setData(sorted as any);
+      chart.timeScale().setVisibleLogicalRange({ from: range.from + LOAD_BACK_COUNT, to: range.to + LOAD_BACK_COUNT });
+
+      requestAnimationFrame(() => { isExtendingRef.current = false; });
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+
     return () => {
       window.removeEventListener('resize', onResize);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
       chart.remove();
       chartRef.current  = null;
       seriesRef.current = null;
@@ -535,8 +613,6 @@ export default function CustomTradingChart({
             {t}
           </button>
         ))}
-        <div style={{ width: 1, height: 14, background: '#e0e3e8', margin: '0 6px' }} />
-        <span style={{ fontSize: 11, color: '#bbb', userSelect: 'none', fontWeight: 600 }}>{symbol}</span>
       </div>
 
       {/* Chart canvas */}
