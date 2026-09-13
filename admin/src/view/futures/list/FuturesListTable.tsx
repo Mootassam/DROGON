@@ -62,21 +62,20 @@ function fmtMoney(n: number): string {
   return `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const CONTRACT_SIZE = 100;
-
+// Net P&L / wallet math — UNCHANGED, do not touch.
 function calcNetPnl(margin: number, pct: number, control: ControlType): number {
   const abs = parseFloat(((margin * pct) / 100).toFixed(5));
   return control === 'profit' ? abs : -abs;
 }
 
+// Close Price (chart target) shown to the customer — independent of margin/fee/lots.
+// Profit: entryPrice + entryPrice * (pct / 10000)
+// Loss:   entryPrice - entryPrice * (pct / 10000)
+// Mirrors server/src/api/tradeOrder/adminClose.ts — keep both in sync.
 function calcPredictedClosePrice(order: TradeOrder, pct: number, control: ControlType): number | null {
   if (!order.entryPrice) return null;
-  const estMargin = order.estimatedMargin ?? order.margin;
-  const netPnl    = calcNetPnl(estMargin, pct, control);
-  const fee       = order.fee || 0;
-  const lots      = order.lots || 1;
-  const priceDiff = (netPnl + fee) / (lots * CONTRACT_SIZE);
-  const raw       = order.direction === 'buy'
+  const priceDiff = order.entryPrice * (pct / 10000);
+  const raw       = control === 'profit'
     ? order.entryPrice + priceDiff
     : order.entryPrice - priceDiff;
   return parseFloat(raw.toFixed(5));

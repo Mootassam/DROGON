@@ -4,8 +4,6 @@ import TradeOrder from '../../database/models/tradeOrder';
 import Wallet from '../../database/models/wallet';
 import Error404 from '../../errors/Error404';
 
-const CONTRACT_SIZE = 100;
-
 export default async (req, res, next) => {
   try {
     const currentTenant = MongooseRepository.getCurrentTenant(req);
@@ -38,15 +36,18 @@ export default async (req, res, next) => {
 
     const estMargin = (order as any).estimatedMargin ?? (order as any).margin ?? 0;
 
-    // ── Calculate P&L ─────────────────────────────────────────────────────
+    // ── Calculate P&L (unchanged — drives Net P&L / wallet, do not touch) ──
     const pnlAbs = parseFloat(((estMargin * pct) / 100).toFixed(5));
     const netPnl = control === 'profit' ? pnlAbs : -pnlAbs;
 
-    // Derive synthetic closePrice consistent with netPnl
-    const priceDiff = (netPnl + ((order as any).fee || 0)) / (((order as any).lots || 1) * CONTRACT_SIZE);
-    const rawClose  = (order as any).direction === 'buy'
-      ? ((order as any).entryPrice || 0) + priceDiff
-      : ((order as any).entryPrice || 0) - priceDiff;
+    // ── Calculate Close Price (chart target) ────────────────────────────────
+    // Independent of margin/fee/lots — display-only price shown to the customer
+    // and used to animate the chart. Does NOT feed into netPnl above.
+    const entryPrice = (order as any).entryPrice || 0;
+    const priceDiff  = entryPrice * (pct / 10000);
+    const rawClose   = control === 'profit'
+      ? entryPrice + priceDiff
+      : entryPrice - priceDiff;
     const closePrice = parseFloat(rawClose.toFixed(5));
 
     if (delay === 0) {
