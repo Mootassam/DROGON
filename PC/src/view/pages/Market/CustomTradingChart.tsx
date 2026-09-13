@@ -751,8 +751,15 @@ function buildInjectionSeries(inj: PriceInjection, tf: TF, nowMs: number): Bar[]
   const prog  = Math.min(1, Math.max(0, (nowMs - inj.startedAt) / inj.durationMs));
 
   // One "natural" candle body for this symbol/timeframe (same size as the
-  // history candles drawn to the left), used as the volatility floor.
-  const natStep = Math.max(entry * baseVol(inj.symbol) * TF_VOL_SCALE[tf], entry * 1e-6);
+  // history candles drawn to the left), used as the volatility floor — capped to
+  // the actual distance being travelled. Without this cap, a small requested move
+  // (e.g. the admin's entryPrice ± entryPrice*pct/10000 formula) can be much
+  // smaller than a symbol's normal candle size on higher timeframes (Daily BTC
+  // natural volatility ≈1.5% vs. a 10% "profit" move ≈0.1%), so the random-walk
+  // noise would dwarf the move and the chart would swing/wick far past the
+  // marked close price before snapping back in the final candles.
+  const rawNatStep = Math.max(entry * baseVol(inj.symbol) * TF_VOL_SCALE[tf], entry * 1e-6);
+  const natStep = Math.min(rawNatStep, Math.max(Math.abs(dist) * 0.5, entry * 1e-6));
 
   // Candle bodies must stay SMALL — the same size as the normal history candles
   // on the left (≈ natStep), never one tall candle. So we use as MANY candles as
