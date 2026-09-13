@@ -27,21 +27,17 @@ export default async (req, res, next) => {
     }
 
     // ── P&L calculation ─────────────────────────────────────────────────────
-    // If the order has an active injection, prefer admin-configured injectionPnl when
-    // the animation window has already elapsed. For early manual closes mid-animation,
-    // calculate P&L from the current animated (customer-supplied) closePrice.
-    const injStartMs  = (order as any).injectionStartedAt
-      ? ((order as any).injectionStartedAt as Date).getTime()
-      : 0;
-    const injDurMs    = (order as any).injectionDurationMs ?? 0;
-    const injDone     = injStartMs > 0 && (injStartMs + injDurMs) <= Date.now();
-
+    // If the order was admin-controlled (chart animation), the close price is a
+    // purely visual/chart value now decoupled from margin/lots/fee, so it must
+    // NEVER be used to derive P&L. Always honor the admin-configured injectionPnl
+    // for these orders, whether the customer closes early or waits for the
+    // animation to finish — this is the exact Net P&L shown to the admin when
+    // they scheduled the close, and it must match what actually gets credited.
     let netPnl: number;
-    if (injDone && (order as any).injectionPnl != null) {
-      // Animation finished before customer closed – use admin-configured P&L
+    if ((order as any).injectionPnl != null) {
       netPnl = parseFloat(((order as any).injectionPnl).toFixed(5));
     } else {
-      // Normal close (or early close mid-animation)
+      // Normal (non-admin-controlled) close — derive P&L from the real price move.
       const priceDiff = order.direction === 'buy'
         ? closePrice - order.entryPrice
         : order.entryPrice - closePrice;
