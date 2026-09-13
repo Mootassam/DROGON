@@ -6,6 +6,19 @@ import Error404 from '../../errors/Error404';
 
 const CONTRACT_SIZE = 100;
 
+// Must match graborders/PC's src/view/shared/useSymbolInjections.ts so the P&L the
+// customer sees ascending/descending live is exactly what gets credited on close.
+function easeInOutSine(t: number): number {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+
+function marketPnl(order: any, closePrice: number): number {
+  const priceDiff = order.direction === 'buy'
+    ? closePrice - order.entryPrice
+    : order.entryPrice - closePrice;
+  return parseFloat((priceDiff * order.lots * CONTRACT_SIZE - order.fee).toFixed(5));
+}
+
 export default async (req, res, next) => {
   try {
     const currentTenant = MongooseRepository.getCurrentTenant(req);
@@ -27,21 +40,27 @@ export default async (req, res, next) => {
     }
 
     // ── P&L calculation ─────────────────────────────────────────────────────
-    // If the order was admin-controlled (chart animation), the close price is a
-    // purely visual/chart value now decoupled from margin/lots/fee, so it must
-    // NEVER be used to derive P&L. Always honor the admin-configured injectionPnl
-    // for these orders, whether the customer closes early or waits for the
-    // animation to finish — this is the exact Net P&L shown to the admin when
-    // they scheduled the close, and it must match what actually gets credited.
+    // Admin-controlled orders (chart animation) must ascend/descend toward the
+    // configured Net P&L over the admin's chosen duration, NOT jump to it
+    // immediately — closing early pays only the fraction reached so far, exactly
+    // what the customer was shown live. If the animation window has fully
+    // elapsed without the customer closing, the injected outcome expires and the
+    // position falls back to the real market price, same as a normal close.
+    const injStart = (order as any).injectionStartedAt
+      ? ((order as any).injectionStartedAt as Date).getTime()
+      : 0;
+    const injDurMs = (order as any).injectionDurationMs ?? 0;
+    const injPnl   = (order as any).injectionPnl;
+
     let netPnl: number;
-    if ((order as any).injectionPnl != null) {
-      netPnl = parseFloat(((order as any).injectionPnl).toFixed(5));
+    if (injStart > 0 && injDurMs > 0 && injPnl != null) {
+      const prog = (Date.now() - injStart) / injDurMs;
+      netPnl = prog < 1
+        ? parseFloat((injPnl * easeInOutSine(Math.max(0, prog))).toFixed(5))
+        : marketPnl(order, closePrice);
     } else {
       // Normal (non-admin-controlled) close — derive P&L from the real price move.
-      const priceDiff = order.direction === 'buy'
-        ? closePrice - order.entryPrice
-        : order.entryPrice - closePrice;
-      netPnl = parseFloat((priceDiff * order.lots * CONTRACT_SIZE - order.fee).toFixed(5));
+      netPnl = marketPnl(order, closePrice);
     }
 
     // ── Update order ────────────────────────────────────────────────────────

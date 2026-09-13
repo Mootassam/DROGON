@@ -4,7 +4,7 @@ import authSelectors from 'src/modules/auth/authSelectors';
 import authAxios from 'src/modules/shared/axios/authAxios';
 import { PairIcon, getPairInfo } from 'src/view/shared/pairConfig';
 import { getTvWsUrl } from 'src/view/shared/wsUrl';
-import useSymbolInjections, { getInjectionDisplayPrice } from 'src/view/shared/useSymbolInjections';
+import useSymbolInjections, { getInjectionDisplayPrice, easeInOutSine } from 'src/view/shared/useSymbolInjections';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,10 @@ interface TradeOrder {
   openTime?: string;
   closeTime?: string;
   createdAt: string;
+  // Admin chart-animation fields (only present while an admin-scheduled close is running)
+  injectionPnl?:         number;
+  injectionStartedAt?:   string;
+  injectionDurationMs?:  number;
 }
 
 // ── WebSocket helpers ──────────────────────────────────────────────────────
@@ -95,6 +99,27 @@ function calcPnl(order: TradeOrder, livePrice: number): number {
     ? livePrice - order.entryPrice
     : order.entryPrice - livePrice;
   return parseFloat((diff * order.lots * 100 - order.fee).toFixed(5));
+}
+
+// Progress [0,1] through an order's admin-scheduled chart animation, or null if
+// there is none / it has already fully elapsed (in which case the position must
+// fall back to tracking the real market, same as calcPnl above).
+function injectionProgress(order: TradeOrder): number | null {
+  if (!order.injectionStartedAt || !order.injectionDurationMs || order.injectionPnl == null) return null;
+  const start = new Date(order.injectionStartedAt).getTime();
+  const prog  = (Date.now() - start) / order.injectionDurationMs;
+  return prog >= 1 ? null : Math.max(0, prog);
+}
+
+// Live P&L for an active order: while the admin's chart animation is running,
+// ascend/descend toward the configured Net P&L over its duration (never the full
+// amount immediately); once it has run its course (or there never was one), fall
+// back to the real market price — exactly what the customer would get by closing
+// right now.
+function calcLivePnl(order: TradeOrder, livePrice: number | null): number | null {
+  const prog = injectionProgress(order);
+  if (prog != null) return parseFloat((order.injectionPnl! * easeInOutSine(prog)).toFixed(5));
+  return livePrice != null ? calcPnl(order, livePrice) : null;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -338,7 +363,7 @@ const OrdersPage: React.FC = () => {
     const lp    = (inj && wsLp !== null)
       ? getInjectionDisplayPrice(inj, wsLp)
       : wsLp;
-    return sum + (lp != null ? calcPnl(o, lp) : 0);
+    return sum + (calcLivePnl(o, lp) ?? 0);
   }, 0);
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -402,7 +427,7 @@ const OrdersPage: React.FC = () => {
                 const lp   = (inj && wsLp !== null)
                   ? getInjectionDisplayPrice(inj, wsLp)
                   : wsLp;
-                const pnl       = lp != null ? calcPnl(order, lp) : null;
+                const pnl       = calcLivePnl(order, lp);
                 const isClosing = closingId === oid;
                 const pair      = getPairInfo(order.symbol) ?? { symbol: order.symbol, name: order.symbol };
 
