@@ -108,7 +108,9 @@ function Profile() {
   }, []);
 
   const displayName = currentUser?.fullName || currentUser?.email || i18n("pages.profile.user");
-  const accountId = "ID: 1234 5678 9012"; // replace with real data if available
+  // Unique customer UID (refcode is unique per user); fall back to the DB id
+  const uid = String(currentUser?.refcode || currentUser?.id || currentUser?._id || "");
+  const accountId = uid ? `ID: ${uid.replace(/(.{4})(?=.)/g, "$1 ")}` : "";
   const availableAssetsLabel = i18n("pages.wallet.totalUsdValue") || "Available Assets";
 
   // Format number with commas + two decimals

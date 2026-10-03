@@ -1033,13 +1033,15 @@ export default class UserRepository {
 
     let criteriaAnd: any = [];
 
+    // Clients = members of this tenant, plus frozen clients
+    // (freezing clears roles and sets status "inactive")
     criteriaAnd.push({
-      tenants: { $elemMatch: { tenant: currentTenant.id } },
-    });
-
-    // 🟩 ADDED: Always filter by role = "member"
-    criteriaAnd.push({
-      tenants: { $elemMatch: { roles: "member" } },
+      tenants: {
+        $elemMatch: {
+          tenant: currentTenant.id,
+          $or: [{ roles: "member" }, { roles: { $size: 0 } }],
+        },
+      },
     });
 
     if (filter) {
